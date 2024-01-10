@@ -24,7 +24,7 @@ source-repository head
 
 library
   exposed-modules:
-      Database
+      CLI.Category
       Models
   other-modules:
       Paths_Obolos
@@ -37,10 +37,11 @@ library
       HDBC
     , HDBC-postgresql
     , base >=4.7 && <5
+    , optparse-applicative
     , time
   default-language: Haskell2010
 
-executable Obolos-exe
+executable obolos
   main-is: Main.hs
   other-modules:
       Paths_Obolos
@@ -54,6 +55,7 @@ executable Obolos-exe
     , HDBC-postgresql
     , Obolos
     , base >=4.7 && <5
+    , optparse-applicative
     , time
   default-language: Haskell2010
 
@@ -72,5 +74,6 @@ test-suite Obolos-test
     , HDBC-postgresql
     , Obolos
     , base >=4.7 && <5
+    , optparse-applicative
     , time
   default-language: Haskell2010

@@ -24,6 +24,7 @@ dependencies:
 - time
 - HDBC
 - HDBC-postgresql
+- optparse-applicative
 
 ghc-options:
 - -Wall
@@ -40,7 +41,7 @@ library:
   source-dirs: src
 
 executables:
-  Obolos-exe:
+  obolos:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
