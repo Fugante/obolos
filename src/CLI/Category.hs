@@ -4,7 +4,6 @@ module CLI.Category
     , handleCategory
     ) where
 
-import Data.Maybe (fromJust)
 import Database.HDBC (IConnection)
 import Options.Applicative
 
