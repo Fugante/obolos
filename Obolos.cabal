@@ -25,7 +25,11 @@ source-repository head
 library
   exposed-modules:
       CLI.Category
+      CLI.Commands
+      CLI.MonthBudget
+      CLI.Transaction
       Models
+      Queries
   other-modules:
       Paths_Obolos
   autogen-modules:
@@ -37,6 +41,7 @@ library
       HDBC
     , HDBC-postgresql
     , base >=4.7 && <5
+    , bytestring
     , optparse-applicative
     , time
   default-language: Haskell2010
@@ -55,6 +60,7 @@ executable obolos
     , HDBC-postgresql
     , Obolos
     , base >=4.7 && <5
+    , bytestring
     , optparse-applicative
     , time
   default-language: Haskell2010
@@ -74,6 +80,7 @@ test-suite Obolos-test
     , HDBC-postgresql
     , Obolos
     , base >=4.7 && <5
+    , bytestring
     , optparse-applicative
     , time
   default-language: Haskell2010
