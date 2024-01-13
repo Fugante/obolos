@@ -1,54 +1,53 @@
-{-# OPTIONS_GHC -Wno-partial-fields #-}
-{-# OPTIONS_GHC -Wno-unused-do-bind #-}
 module Models
     ( Category(..)
-    , Transaction(..)
-    , MonthBudget(..)
+    , showCategory
+    , cat2Tuple
+    , tuple2Cat
+    , updateTuple
     , addCategory
     , getCategory
     , updateCategory
     , deleteCategory
-    , addTransaction
-    , getTransaction
-    , updateTransaction
-    , deleteTransaction
-    , addMonthBudget
+    -- , addTransaction
+    -- , getTransaction
+    -- , updateTransaction
+    -- , deleteTransaction
+    -- , addMonthBudget
     ) where
 
 import Control.Monad (void)
-import Data.Time
+import Data.Bool (bool)
+import Data.ByteString.Char8 (unpack)
+import Data.Maybe (fromJust)
 import Database.HDBC
-    ( fromSql, toSql, quickQuery', IConnection(run) )
 
+
+type Tuple = [SqlValue]
 
 data Category =
     Category
-    { catId :: Integer
-    , category :: String
-    , supercategory :: Integer
-    }
-    deriving (Eq, Show, Read)
+    { cId :: Integer
+    , cName :: String
+    , cSuper :: Integer
+    } deriving (Eq, Show)
 
-data Transaction =
-    Transaction
-    { transId :: Integer
-    , amount :: Integer
-    , transCat :: Integer
-    , date :: UTCTime
-    , notes :: String
-    }
-    deriving (Eq, Show, Read)
+showCategory :: Category -> String
+showCategory (Category cid cn cs) = unwords [show cid, show cn, show cs]
 
-data MonthBudget =
-    MonthBudget
-    { mbId :: Integer
-    , year :: Integer
-    , month :: Integer
-    , mbCat :: Integer
-    , planned :: Integer
-    , actual :: Integer
-    }
-    deriving (Eq, Show, Read)
+cat2Tuple :: Category -> Tuple
+cat2Tuple (Category cid cn cs) = [toSql cid, toSql cn, toSql cs]
+
+tuple2Cat :: Tuple -> Maybe Category
+tuple2Cat [SqlInteger cid, SqlByteString c, SqlInteger sc] =
+    Just $ Category cid (unpack c) sc
+tuple2Cat _ = Nothing
+
+selectRight :: SqlValue -> SqlValue -> SqlValue
+selectRight a b = bool a b (b /= SqlNull)
+
+updateTuple :: [SqlValue] -> [SqlValue] -> [SqlValue]
+updateTuple as bs = [ f b | (f, b) <- zip (selectRight <$> as) bs ]
+
 
 _INSERT_CATEGORY :: String
 _INSERT_CATEGORY = "INSERT INTO Category (category, supercategory) VALUES (?, ?);"
@@ -101,56 +100,57 @@ _UPDATE_MONTHBUDGET =
 _DELETE_MONTHBUDGET :: String
 _DELETE_MONTHBUDGET = "DELETE FROM monthbudget WHERE id = ?"
 
-addCategory :: IConnection conn => conn -> Category -> IO ()
-addCategory conn (Category _ c sc) = void $ run conn _INSERT_CATEGORY [toSql c, toSql sc]
+
+addCategory :: IConnection conn => conn -> String -> Integer -> IO ()
+addCategory conn c sc = void $ run conn _INSERT_CATEGORY [toSql c, toSql sc]
 
 getCategory :: IConnection conn => conn -> Integer -> IO (Maybe Category)
 getCategory conn cid = do
     tuples <- quickQuery' conn _SELECT_CATEGORY [toSql cid]
     case tuples of
-        [[_, cat, sup]] -> return $ Just $ Category cid (fromSql cat) (fromSql sup)
+        [tuple] -> return $ tuple2Cat tuple
         [] -> return Nothing
         _ -> fail $ "Crital Error: more than one category with id " ++ show cid
 
-updateCategory :: IConnection conn => conn -> Category -> IO ()
-updateCategory conn (Category cid c sc) =
-    void $ run conn _UPDATE_CATEGORY [toSql c, toSql sc, toSql cid]
+updateCategory ::
+    IConnection conn => conn -> Integer -> Maybe String -> Maybe Integer -> IO ()
+updateCategory conn cid c sc = do
+    mCat <- getCategory conn cid
+    case mCat of
+        Nothing -> putStrLn $ unwords ["Category with id", show cid, "does not exist."]
+        Just cat -> void $ run conn _UPDATE_CATEGORY [c', sc', cid']
+            where [cid', c', sc'] =
+                    updateTuple (cat2Tuple cat) [toSql cid, toSql c, toSql sc]
 
 deleteCategory :: IConnection conn => conn -> Integer -> IO ()
 deleteCategory conn cid = void $ run conn _DELETE_CATEGORY [toSql cid]
 
-addTransaction :: IConnection conn => conn -> Transaction -> IO Transaction
-addTransaction conn (Transaction _ a cid d n) = do
-    run conn _INSERT_TRANSACTION attrs
-    tuples <- quickQuery' conn _SELECT_CATEGORY' attrs
-    case tuples of
-        [tid:_] -> return $ Transaction (fromSql tid) a cid d n
-        [] -> fail "Error: could not insert transaction"
-        _ -> fail "Critical error: more than one category with same attributes"
-        where attrs = [toSql a, toSql cid, toSql d, toSql n]
+-- addTransaction :: IConnection conn => conn -> Transaction -> IO ()
+-- addTransaction conn (Transaction _ a cid d n) =
+--     void $ run conn _INSERT_TRANSACTION [toSql a, toSql cid, toSql d, toSql n]
 
-getTransaction :: IConnection conn => conn -> Integer -> IO (Maybe Transaction)
-getTransaction conn tid = do
-    tuples <- quickQuery' conn _SELECT_TRANSACTION [toSql tid]
-    case tuples of
-        [[_, a, cid, d, n]] -> return $ Just $
-            Transaction tid (fromSql a) (fromSql cid) (fromSql d) (fromSql n)
-        [] -> return Nothing
-        _ -> fail $ "Critical Error: more than one transaction with id " ++ show tid
+-- getTransaction :: IConnection conn => conn -> Integer -> IO (Maybe Transaction)
+-- getTransaction conn tid = do
+--     tuples <- quickQuery' conn _SELECT_TRANSACTION [toSql tid]
+--     case tuples of
+--         [[_, a, cid, d, n]] -> return $ Just $
+--             Transaction tid (fromSql a) (fromSql cid) (fromSql d) (fromSql n)
+--         [] -> return Nothing
+--         _ -> fail $ "Critical Error: more than one transaction with id " ++ show tid
 
-updateTransaction :: IConnection conn => conn -> Transaction -> IO (Maybe Transaction)
-updateTransaction conn (Transaction tid a cid d n) =
-    run conn _UPDATE_CATEGORY [toSql a, toSql cid, toSql d, toSql n, toSql tid]
-    >> getTransaction conn tid
+-- updateTransaction :: IConnection conn => conn -> Transaction -> IO (Maybe Transaction)
+-- updateTransaction conn (Transaction tid a cid d n) =
+--     run conn _UPDATE_CATEGORY [toSql a, toSql cid, toSql d, toSql n, toSql tid]
+--     >> getTransaction conn tid
 
-deleteTransaction :: IConnection conn => conn -> Integer -> IO Integer
-deleteTransaction conn tid = run conn _DELETE_CATEGORY [toSql tid]
+-- deleteTransaction :: IConnection conn => conn -> Integer -> IO Integer
+-- deleteTransaction conn tid = run conn _DELETE_CATEGORY [toSql tid]
 
-addMonthBudget :: IConnection conn => conn -> MonthBudget -> IO MonthBudget
-addMonthBudget conn (MonthBudget _ y m cid p a) = do
-    run conn _INSERT_MONTHBUDGET [toSql y, toSql m, toSql cid, toSql p, toSql a]
-    tuples <- quickQuery' conn _SELECT_MONTHBUDGET' [toSql y, toSql m, toSql cid]
-    case tuples of
-        [mid:_] -> return $ MonthBudget (fromSql mid) y m cid p a
-        [] -> fail "Error: could not insert monthbudget"
-        _ -> fail "Critical error"
+-- addMonthBudget :: IConnection conn => conn -> MonthBudget -> IO MonthBudget
+-- addMonthBudget conn (MonthBudget _ y m cid p a) = do
+--     run conn _INSERT_MONTHBUDGET [toSql y, toSql m, toSql cid, toSql p, toSql a]
+--     tuples <- quickQuery' conn _SELECT_MONTHBUDGET' [toSql y, toSql m, toSql cid]
+--     case tuples of
+--         [mid:_] -> return $ MonthBudget (fromSql mid) y m cid p a
+--         [] -> fail "Error: could not insert monthbudget"
+--         _ -> fail "Critical error"
