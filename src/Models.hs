@@ -16,7 +16,13 @@ module Models
     , getTransaction
     , updateTransaction
     , deleteTransaction
-    -- , addMonthBudget
+    , showMb
+    , mb2Tuple
+    , tuple2Mb
+    , addMb
+    , getMb
+    , updateMb
+    , deleteMb
     ) where
 
 import Control.Monad (void)
@@ -36,6 +42,7 @@ selectRight a b = bool a b (b /= SqlNull)
 
 updateTuple :: [SqlValue] -> [SqlValue] -> [SqlValue]
 updateTuple as bs = [ f b | (f, b) <- zip (selectRight <$> as) bs ]
+
 
 data Category =
     Category
@@ -78,6 +85,7 @@ updateCategory conn i c s = do
 
 deleteCategory :: IConnection conn => conn -> Integer -> IO ()
 deleteCategory conn cid = void $ run conn Q.deleteCategory [toSql cid]
+
 
 data Transaction =
     Transaction
@@ -141,11 +149,72 @@ updateTransaction conn i a c d n = do
 deleteTransaction :: IConnection conn => conn -> Integer -> IO ()
 deleteTransaction conn i = void $ run conn Q.deleteTransaction [toSql i]
 
--- addMonthBudget :: IConnection conn => conn -> MonthBudget -> IO MonthBudget
--- addMonthBudget conn (MonthBudget _ y m cid p a) = do
---     run conn _INSERT_MONTHBUDGET [toSql y, toSql m, toSql cid, toSql p, toSql a]
---     tuples <- quickQuery' conn _SELECT_MONTHBUDGET' [toSql y, toSql m, toSql cid]
---     case tuples of
---         [mid:_] -> return $ MonthBudget (fromSql mid) y m cid p a
---         [] -> fail "Error: could not insert monthbudget"
---         _ -> fail "Critical error"
+
+data MonthBudget =
+    MonthBudget
+    { mId :: Integer
+    , mYear :: Integer
+    , mMonth :: Integer
+    , mCat :: Integer
+    , mPlanned :: Integer
+    , mActual :: Integer
+    } deriving (Eq, Show)
+
+showMb :: MonthBudget -> String
+showMb (MonthBudget i y m c p a) = unwords $ map show [i, y, m, c, p, a]
+
+mb2Tuple :: MonthBudget -> Tuple
+mb2Tuple (MonthBudget i y m c p a) = map toSql [i, y, m, c, p, a]
+
+tuple2Mb :: Tuple -> Maybe MonthBudget
+tuple2Mb
+    [ SqlInteger i
+    , SqlInteger y
+    , SqlInt32 m
+    , SqlInteger c
+    , SqlInteger p
+    , SqlInteger a
+    ] =
+    Just $ MonthBudget i y (toInteger m) c p a
+tuple2Mb _ = Nothing
+
+addMb ::
+    IConnection conn =>
+    conn ->
+    Integer ->
+    Integer ->
+    Integer ->
+    Integer ->
+    Integer ->
+    IO ()
+addMb conn y m c p a = void $ run conn Q.insertMonthBudget $ map toSql [y, m, c, p, a]
+
+getMb :: IConnection conn => conn -> Integer -> IO (Maybe MonthBudget)
+getMb conn i = do
+    tuples <- quickQuery' conn Q.selectMonthBudget [toSql i]
+    case tuples of
+        [tuple] -> return $ tuple2Mb tuple
+        [] -> return Nothing
+        _ -> fail $ "Critical Error: more than one monthbudget with id " ++ show i
+
+updateMb ::
+    IConnection conn =>
+    conn ->
+    Integer ->
+    Maybe Integer ->
+    Maybe Integer ->
+    Maybe Integer ->
+    Maybe Integer ->
+    Maybe Integer ->
+    IO ()
+updateMb conn i y m c p a = do
+    mMb <- getMb conn i
+    case mMb of
+        Nothing -> putStrLn $ unwords ["Month budget with id", show i, "does not exist."]
+        Just mb ->
+            let [i', y', m', c', p', a'] =
+                    updateTuple (mb2Tuple mb) (map toSql [Just i, y, m, c, p, a])
+            in void $ run conn Q.updateMonthBudget [y', m', c', p', a', i']
+
+deleteMb :: IConnection conn => conn -> Integer -> IO ()
+deleteMb conn i = void $ run conn Q.deleteMonthBudget [toSql i]

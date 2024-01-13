@@ -49,7 +49,7 @@ amountArg = argument auto (metavar "AMOUNT" <> help "transaction amount (in cent
 
 categoryArg :: Parser Integer
 categoryArg =
-    argument auto (metavar "CATEGORY-ID" <> help "id of the transction's category")
+    argument auto (metavar "CATEGORY-ID" <> help "id of the transaction's category")
 
 dateArg :: Parser LocalTime
 dateArg =

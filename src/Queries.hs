@@ -8,6 +8,10 @@ module Queries
     , selectTransaction
     , updateTransaction
     , deleteTransaction
+    , insertMonthBudget
+    , selectMonthBudget
+    , updateMonthBudget
+    , deleteMonthBudget
     ) where
 
 
@@ -31,38 +35,38 @@ deleteCategory = "DELETE FROM Category WHERE id = ?"
 -- Transaction CRUD queries
 insertTransaction :: String
 insertTransaction =
-    "INSERT INTO transaction (amount, category_id, date, notes) VALUES (?, ?, ?, ?);"
+    "INSERT INTO Transaction (amount, category_id, date, notes) VALUES (?, ?, ?, ?);"
 
 selectTransaction :: String
-selectTransaction = "SELECT * FROM transaction WHERE id = ?;"
+selectTransaction = "SELECT * FROM Transaction WHERE id = ?;"
 
 updateTransaction :: String
 updateTransaction =
-       "UPDATE transaction SET amount = ?, category_id = ?, date = ?, notes = ? "
+       "UPDATE Transaction SET amount = ?, category_id = ?, date = ?, notes = ? "
     ++ "WHERE id = ?;"
 
 deleteTransaction :: String
-deleteTransaction = "DELETE FROM transaction WHERE id = ?"
+deleteTransaction = "DELETE FROM Transaction WHERE id = ?;"
 
 
 -- MonthBudget CRUD queries
-_INSERT_MONTHBUDGET :: String
-_INSERT_MONTHBUDGET =
-       "INSERT INTO monthbudget (year, month, category_id, planned, actual) "
+insertMonthBudget :: String
+insertMonthBudget =
+       "INSERT INTO Monthbudget (year, month, category_id, planned, actual) "
     ++ "VALUES (?, ?, ?, ?, ?);"
 
-_SELECT_MONTHBUDGET :: String
-_SELECT_MONTHBUDGET = "SELECT * FROM monthbudget WHERE id = ?;"
+selectMonthBudget :: String
+selectMonthBudget = "SELECT * FROM Monthbudget WHERE id = ?;"
 
 _SELECT_MONTHBUDGET' :: String
 _SELECT_MONTHBUDGET' =
     "SELECT * FROM monthbudget WHERE year = ? AND month = ? AND category_id = ?;"
 
-_UPDATE_MONTHBUDGET :: String
-_UPDATE_MONTHBUDGET =
-       "UPDATE monthbudget SET "
-    ++ "year = ?, month = ?, category_id = ?, planned = ? actual = ? "
+updateMonthBudget :: String
+updateMonthBudget =
+       "UPDATE Monthbudget SET "
+    ++ "year = ?, month = ?, category_id = ?, planned = ?, actual = ? "
     ++ "WHERE id = ?;"
 
-_DELETE_MONTHBUDGET :: String
-_DELETE_MONTHBUDGET = "DELETE FROM monthbudget WHERE id = ?"
+deleteMonthBudget :: String
+deleteMonthBudget = "DELETE FROM Monthbudget WHERE id = ?"
