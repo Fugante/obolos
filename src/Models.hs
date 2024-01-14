@@ -37,6 +37,10 @@ import qualified Queries as Q
 
 type Tuple = [SqlValue]
 
+rotateL :: [a] -> [a]
+rotateL [] = []
+rotateL as = tail as ++ [head as]
+
 selectRight :: SqlValue -> SqlValue -> SqlValue
 selectRight a b = bool a b (b /= SqlNull)
 
@@ -67,21 +71,21 @@ addCategory conn c s = void $ run conn Q.insertCategory [toSql c, toSql s]
 
 getCategory :: IConnection conn => conn -> Integer -> IO (Maybe Category)
 getCategory conn i = do
-    tuples <- quickQuery' conn Q.selectCategory [toSql i]
-    case tuples of
-        [tuple] -> return $ tuple2Cat tuple
+    ts <- quickQuery' conn Q.selectCategory [toSql i]
+    case ts of
+        [t] -> return $ tuple2Cat t
         [] -> return Nothing
         _ -> fail $ "Crital Error: more than one category with id " ++ show i
 
 updateCategory ::
     IConnection conn => conn -> Integer -> Maybe String -> Maybe Integer -> IO ()
 updateCategory conn i c s = do
-    mCat <- getCategory conn i
-    case mCat of
-        Nothing -> putStrLn $ unwords ["Category with id", show i, "does not exist."]
-        Just cat ->
-            let [i', c', s'] = updateTuple (cat2Tuple cat) [toSql i, toSql c, toSql s]
-            in void $ run conn Q.updateCategory [c', s', i']
+    ts <- quickQuery' conn Q.selectCategory [toSql i]
+    case ts of
+        [t] ->
+            let t' = updateTuple t [toSql i, toSql c, toSql s]
+            in void $ run conn Q.updateCategory (rotateL t')
+        _ -> putStrLn $ unwords ["Category with id", show i, "does not exist."]
 
 deleteCategory :: IConnection conn => conn -> Integer -> IO ()
 deleteCategory conn cid = void $ run conn Q.deleteCategory [toSql cid]
@@ -136,15 +140,12 @@ updateTransaction ::
     Maybe String ->
     IO ()
 updateTransaction conn i a c d n = do
-    mTrans <- getTransaction conn i
-    case mTrans of
-        Nothing -> putStrLn $ unwords ["Transaction with id", show i, "does not exist."]
-        Just trans ->
-            let [i', a', c', d', n'] =
-                    updateTuple
-                    (trans2Tuple trans)
-                    [toSql i, toSql a, toSql c, toSql d, toSql n]
-            in void $ run conn Q.updateTransaction [a', c', d', n', i']
+    ts <- quickQuery' conn Q.selectTransaction [toSql i]
+    case ts of
+        [t] ->
+            let t' = updateTuple t [toSql i, toSql a, toSql c, toSql d, toSql n]
+            in void $ run conn Q.updateTransaction (rotateL t')
+        _ -> putStrLn $ unwords ["Transaction with id", show i, "does not exist."]
 
 deleteTransaction :: IConnection conn => conn -> Integer -> IO ()
 deleteTransaction conn i = void $ run conn Q.deleteTransaction [toSql i]
@@ -208,13 +209,12 @@ updateMb ::
     Maybe Integer ->
     IO ()
 updateMb conn i y m c p a = do
-    mMb <- getMb conn i
-    case mMb of
-        Nothing -> putStrLn $ unwords ["Month budget with id", show i, "does not exist."]
-        Just mb ->
-            let [i', y', m', c', p', a'] =
-                    updateTuple (mb2Tuple mb) (map toSql [Just i, y, m, c, p, a])
-            in void $ run conn Q.updateMonthBudget [y', m', c', p', a', i']
+    ts <- quickQuery' conn Q.selectTransaction [toSql i]
+    case ts of
+        [t] ->
+            let t' = updateTuple t $ map toSql [Just i, y, m, c, p, a]
+            in void $ run conn Q.updateMonthBudget (rotateL t')
+        _ -> putStrLn $ unwords ["Month budget with id", show i, "does not exist."]
 
 deleteMb :: IConnection conn => conn -> Integer -> IO ()
 deleteMb conn i = void $ run conn Q.deleteMonthBudget [toSql i]
