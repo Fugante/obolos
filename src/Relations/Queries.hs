@@ -1,4 +1,4 @@
-module Queries
+module Relations.Queries
     ( insertCategory
     , selectCategory
     , selectCategory'
@@ -12,10 +12,12 @@ module Queries
     , selectMonthBudget
     , updateMonthBudget
     , deleteMonthBudget
+    , selectAll
     ) where
 
 
 -- Category CRUD queries
+
 insertCategory :: String
 insertCategory = "INSERT INTO Category (category, supercategory) VALUES (?, ?);"
 
@@ -33,6 +35,7 @@ deleteCategory = "DELETE FROM Category WHERE id = ?"
 
 
 -- Transaction CRUD queries
+
 insertTransaction :: String
 insertTransaction =
     "INSERT INTO Transaction (amount, category_id, date, notes) VALUES (?, ?, ?, ?);"
@@ -50,6 +53,7 @@ deleteTransaction = "DELETE FROM Transaction WHERE id = ?;"
 
 
 -- MonthBudget CRUD queries
+
 insertMonthBudget :: String
 insertMonthBudget =
        "INSERT INTO Monthbudget (year, month, category_id, planned, actual) "
@@ -69,4 +73,9 @@ updateMonthBudget =
     ++ "WHERE id = ?;"
 
 deleteMonthBudget :: String
-deleteMonthBudget = "DELETE FROM Monthbudget WHERE id = ?"
+deleteMonthBudget = "DELETE FROM Monthbudget WHERE id = ?;"
+
+
+
+selectAll :: String
+selectAll = "SELECT * FROM "

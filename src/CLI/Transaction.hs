@@ -8,7 +8,7 @@ import Data.Time
 import Database.HDBC (IConnection)
 import Options.Applicative
 
-import Models
+import Relations.Entities
 
 
 data AddOptions =
@@ -115,20 +115,20 @@ deleteOptions = DeleteOptions <$> idArg
 -- Option handlers
 
 handleAdd :: IConnection conn => conn -> AddOptions -> IO ()
-handleAdd conn (AddOptions a c d n) = addTransaction conn a c d n
+handleAdd conn (AddOptions a c d n) = addTrans conn a c d n
 
 handleGet :: IConnection conn => conn -> GetOptions -> IO ()
 handleGet conn (GetOptions i) = do
-    mTrans <- getTransaction conn i
+    mTrans <- getTrans conn i
     case mTrans of
         Nothing -> putStrLn $ unwords ["Transaction with id", show i, "does not exist."]
         Just trans -> putStrLn $ showTrans trans
 
 handleUpdate :: IConnection conn => conn -> UpdateOptions -> IO ()
-handleUpdate conn (UpdateOptions i a c d n) = updateTransaction conn i a c d n
+handleUpdate conn (UpdateOptions i a c d n) = updateTrans conn i a c d n
 
 handleDelete :: IConnection conn => conn -> DeleteOptions -> IO ()
-handleDelete conn (DeleteOptions i) = deleteTransaction conn i
+handleDelete conn (DeleteOptions i) = delTrans conn i
 
 
 -- Command definitions

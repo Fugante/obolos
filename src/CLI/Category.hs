@@ -7,7 +7,8 @@ module CLI.Category
 import Database.HDBC (IConnection)
 import Options.Applicative
 
-import Models
+import Relations.Entities
+import Relations.Views
 
 
 data AddOptions =
@@ -16,7 +17,9 @@ data AddOptions =
     , addOptScat :: Integer
     }
 
-data GetOptions = GetOptions { getOptId :: Integer }
+data GetOptions =
+      GetOne { getOptId :: Integer }
+    | GetAll
 
 data UpdateOptions =
     UpdateOptions
@@ -64,8 +67,14 @@ supercategoryOption = optional $
 addOptions :: Parser AddOptions
 addOptions = AddOptions <$> categoryArgument <*> supercategoryArgument
 
-getOptions :: Parser GetOptions
-getOptions = GetOptions <$> idArgument
+getAllOpt :: Parser GetOptions
+getAllOpt = flag' GetAll ( short 'a' <> long "all" <> help "Show all categories")
+
+getOneOpt :: Parser GetOptions
+getOneOpt = GetOne <$> idArgument
+
+getOpts :: Parser GetOptions
+getOpts = getOneOpt <|> getAllOpt
 
 updateOptions :: Parser UpdateOptions
 updateOptions = UpdateOptions <$> idArgument <*> categoryOption <*> supercategoryOption
@@ -74,26 +83,29 @@ deleteOptions :: Parser DeleteOptions
 deleteOptions = DeleteOptions <$> idArgument
 
 handleAdd :: IConnection conn => conn -> AddOptions -> IO ()
-handleAdd conn (AddOptions c sc) = addCategory conn c sc
+handleAdd conn (AddOptions c sc) = addCat conn c sc
 
 handleGet :: IConnection conn => conn -> GetOptions -> IO ()
-handleGet conn (GetOptions cid) = do
-    mCat <- getCategory conn cid
+handleGet conn (GetOne cid) = do
+    mCat <- getCat conn cid
     case mCat of
         Nothing -> putStrLn $ unwords ["Category with id", show cid, "does not exist."]
-        Just cat -> putStrLn $ showCategory cat
+        Just cat -> putStrLn $ showCat cat
+handleGet conn GetAll = do
+    cats <- getAll conn (Cat (Category 0 "" 0))
+    putStrLn $ showCats (map getCategory cats)
 
 handleUpdate :: IConnection conn => conn -> UpdateOptions -> IO ()
-handleUpdate conn (UpdateOptions cid c sc) = updateCategory conn cid c sc
+handleUpdate conn (UpdateOptions cid c sc) = updateCat conn cid c sc
 
 handleDelete :: IConnection conn => conn -> DeleteOptions -> IO ()
-handleDelete conn (DeleteOptions cid) = deleteCategory conn cid
+handleDelete conn (DeleteOptions cid) = deleteCat conn cid
 
 addCommand :: ParserInfo CategoryOptions
 addCommand = info (Add <$> addOptions) (progDesc "Add a new category")
 
 getCommand :: ParserInfo CategoryOptions
-getCommand = info (Get <$> getOptions) (progDesc "Get the category with given ID")
+getCommand = info (Get <$> getOpts) (progDesc "Get the category with given ID")
 
 updateCommand :: ParserInfo CategoryOptions
 updateCommand = info

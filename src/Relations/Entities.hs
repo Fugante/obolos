@@ -1,38 +1,45 @@
-module Models
-    ( Category(..)
+{-# LANGUAGE InstanceSigs #-}
+
+module Relations.Entities
+    ( Tuple
+    , Category(..)
     , Transaction(..)
+    , MonthBudget(..)
+    , Relation(..)
     , updateTuple
     , cat2Tuple
     , tuple2Cat
-    , showCategory
-    , addCategory
-    , getCategory
-    , updateCategory
-    , deleteCategory
+    , showCat
+    , showCats
+    , addCat
+    , getCat
+    , updateCat
+    , deleteCat
     , trans2Tuple
     , tuple2Trans
     , showTrans
-    , addTransaction
-    , getTransaction
-    , updateTransaction
-    , deleteTransaction
+    , addTrans
+    , getTrans
+    , updateTrans
+    , delTrans
     , showMb
     , mb2Tuple
     , tuple2Mb
     , addMb
     , getMb
     , updateMb
-    , deleteMb
+    , delMb
     ) where
 
 import Control.Monad (void)
 import Data.Bool (bool)
 import Data.ByteString.Char8 (unpack)
-import Data.Maybe (fromMaybe)
+import Data.List (intercalate)
+import Data.Maybe (fromMaybe, fromJust)
 import Data.Time (LocalTime)
 import Database.HDBC
 
-import qualified Queries as Q
+import qualified Relations.Queries as Q
 
 
 type Tuple = [SqlValue]
@@ -44,7 +51,7 @@ rotateL as = tail as ++ [head as]
 selectRight :: SqlValue -> SqlValue -> SqlValue
 selectRight a b = bool a b (b /= SqlNull)
 
-updateTuple :: [SqlValue] -> [SqlValue] -> [SqlValue]
+updateTuple :: Tuple -> Tuple -> Tuple
 updateTuple as bs = [ f b | (f, b) <- zip (selectRight <$> as) bs ]
 
 
@@ -55,31 +62,41 @@ data Category =
     , cSuper :: Integer
     } deriving (Eq, Show)
 
-showCategory :: Category -> String
-showCategory (Category i c s) = unwords [show i, show c, show s]
+showCat :: Category -> String
+showCat (Category i c s) = intercalate ", " [show i, show c, show s]
+
+showCats :: [Category] -> String
+showCats cs =
+       intercalate ", " ["id", "category", "supercategory"]
+    ++ "\n"
+    ++ intercalate "\n" (map showCat cs)
 
 cat2Tuple :: Category -> Tuple
 cat2Tuple (Category i c s) = [toSql i, toSql c, toSql s]
 
 tuple2Cat :: Tuple -> Maybe Category
-tuple2Cat [SqlInteger i, SqlByteString c, SqlInteger s] =
-    Just $ Category i (unpack c) s
+tuple2Cat [SqlInteger i, SqlString c, SqlInteger s] = Just $ Category i c s
+tuple2Cat [SqlInteger i, SqlByteString c, SqlInteger s] = Just $ Category i (unpack c) s
 tuple2Cat _ = Nothing
 
-addCategory :: IConnection conn => conn -> String -> Integer -> IO ()
-addCategory conn c s = void $ run conn Q.insertCategory [toSql c, toSql s]
+instance Semigroup Category where
+    (<>) :: Category -> Category -> Category
+    c <> c' = fromJust . tuple2Cat $ updateTuple (cat2Tuple c) (cat2Tuple c')
 
-getCategory :: IConnection conn => conn -> Integer -> IO (Maybe Category)
-getCategory conn i = do
+addCat :: IConnection conn => conn -> String -> Integer -> IO ()
+addCat conn c s = void $ run conn Q.insertCategory [toSql c, toSql s]
+
+getCat :: IConnection conn => conn -> Integer -> IO (Maybe Category)
+getCat conn i = do
     ts <- quickQuery' conn Q.selectCategory [toSql i]
     case ts of
         [t] -> return $ tuple2Cat t
         [] -> return Nothing
         _ -> fail $ "Crital Error: more than one category with id " ++ show i
 
-updateCategory ::
+updateCat ::
     IConnection conn => conn -> Integer -> Maybe String -> Maybe Integer -> IO ()
-updateCategory conn i c s = do
+updateCat conn i c s = do
     ts <- quickQuery' conn Q.selectCategory [toSql i]
     case ts of
         [t] ->
@@ -87,8 +104,8 @@ updateCategory conn i c s = do
             in void $ run conn Q.updateCategory (rotateL t')
         _ -> putStrLn $ unwords ["Category with id", show i, "does not exist."]
 
-deleteCategory :: IConnection conn => conn -> Integer -> IO ()
-deleteCategory conn cid = void $ run conn Q.deleteCategory [toSql cid]
+deleteCat :: IConnection conn => conn -> Integer -> IO ()
+deleteCat conn cid = void $ run conn Q.deleteCategory [toSql cid]
 
 
 data Transaction =
@@ -111,7 +128,7 @@ tuple2Trans [SqlInteger i, SqlInteger a, SqlInteger c, SqlLocalTime d, SqlByteSt
     Just $ Transaction i a c d (unpack n)
 tuple2Trans _ = Nothing
 
-addTransaction ::
+addTrans ::
     IConnection conn =>
     conn ->
     Integer ->
@@ -119,18 +136,18 @@ addTransaction ::
     LocalTime ->
     Maybe String ->
     IO ()
-addTransaction conn a c d n = void $
+addTrans conn a c d n = void $
     run conn Q.insertTransaction [toSql a, toSql c, toSql d, toSql $ fromMaybe "" n]
 
-getTransaction :: IConnection conn => conn -> Integer -> IO (Maybe Transaction)
-getTransaction conn i = do
+getTrans :: IConnection conn => conn -> Integer -> IO (Maybe Transaction)
+getTrans conn i = do
     tuples <- quickQuery' conn Q.selectTransaction [toSql i]
     case tuples of
         [tuple] -> return $ tuple2Trans tuple
         [] -> return Nothing
         _ -> fail $ "Critical Error: more than one transaction with id " ++ show i
 
-updateTransaction ::
+updateTrans ::
     IConnection conn =>
     conn ->
     Integer ->
@@ -139,7 +156,7 @@ updateTransaction ::
     Maybe LocalTime ->
     Maybe String ->
     IO ()
-updateTransaction conn i a c d n = do
+updateTrans conn i a c d n = do
     ts <- quickQuery' conn Q.selectTransaction [toSql i]
     case ts of
         [t] ->
@@ -147,8 +164,8 @@ updateTransaction conn i a c d n = do
             in void $ run conn Q.updateTransaction (rotateL t')
         _ -> putStrLn $ unwords ["Transaction with id", show i, "does not exist."]
 
-deleteTransaction :: IConnection conn => conn -> Integer -> IO ()
-deleteTransaction conn i = void $ run conn Q.deleteTransaction [toSql i]
+delTrans :: IConnection conn => conn -> Integer -> IO ()
+delTrans conn i = void $ run conn Q.deleteTransaction [toSql i]
 
 
 data MonthBudget =
@@ -216,5 +233,12 @@ updateMb conn i y m c p a = do
             in void $ run conn Q.updateMonthBudget (rotateL t')
         _ -> putStrLn $ unwords ["Month budget with id", show i, "does not exist."]
 
-deleteMb :: IConnection conn => conn -> Integer -> IO ()
-deleteMb conn i = void $ run conn Q.deleteMonthBudget [toSql i]
+delMb :: IConnection conn => conn -> Integer -> IO ()
+delMb conn i = void $ run conn Q.deleteMonthBudget [toSql i]
+
+
+data Relation =
+      Cat { getCategory :: Category}
+    | Trans Transaction
+    | Mb MonthBudget
+    deriving (Eq, Show)

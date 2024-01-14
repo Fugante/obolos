@@ -28,8 +28,9 @@ library
       CLI.Commands
       CLI.MonthBudget
       CLI.Transaction
-      Models
-      Queries
+      Relations.Entities
+      Relations.Queries
+      Relations.Views
       Settings
   other-modules:
       Paths_Obolos

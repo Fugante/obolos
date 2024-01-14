@@ -7,7 +7,7 @@ module CLI.MonthBudget
 import Database.HDBC (IConnection)
 import Options.Applicative
 
-import Models
+import Relations.Entities
 
 
 data AddOptions =
@@ -142,7 +142,7 @@ handleUpdate :: IConnection conn => conn -> UpdateOptions -> IO ()
 handleUpdate conn (UpdateOptions i y m c p a) = updateMb conn i y m c p a
 
 handleDel :: IConnection conn => conn -> DeleteOptions -> IO ()
-handleDel conn (DeleteOptions i) = deleteMb conn i
+handleDel conn (DeleteOptions i) = delMb conn i
 
 
 -- Command definitions
