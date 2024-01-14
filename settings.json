@@ -1,0 +1,9 @@
+{
+    "db": {
+        "user": "obolos",
+        "password": "hidragerum",
+        "database": "Obolos",
+        "host": "localhost",
+        "port": 5423
+    }
+}

@@ -26,6 +26,7 @@ dependencies:
 - HDBC-postgresql
 - optparse-applicative
 - bytestring
+- aeson
 
 ghc-options:
 - -Wall

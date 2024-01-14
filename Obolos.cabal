@@ -30,6 +30,7 @@ library
       CLI.Transaction
       Models
       Queries
+      Settings
   other-modules:
       Paths_Obolos
   autogen-modules:
@@ -40,6 +41,7 @@ library
   build-depends:
       HDBC
     , HDBC-postgresql
+    , aeson
     , base >=4.7 && <5
     , bytestring
     , optparse-applicative
@@ -59,6 +61,7 @@ executable obolos
       HDBC
     , HDBC-postgresql
     , Obolos
+    , aeson
     , base >=4.7 && <5
     , bytestring
     , optparse-applicative
@@ -79,6 +82,7 @@ test-suite Obolos-test
       HDBC
     , HDBC-postgresql
     , Obolos
+    , aeson
     , base >=4.7 && <5
     , bytestring
     , optparse-applicative
