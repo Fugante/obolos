@@ -1,14 +1,22 @@
 module CLI.Commands
     ( cli
-    , handleCli
-    ) where
+    , handleCli )
+    where
 
-import Database.HDBC (IConnection)
 import Options.Applicative
+    ( (<**>),
+      command,
+      fullDesc,
+      info,
+      progDesc,
+      helper,
+      hsubparser,
+      Parser,
+      ParserInfo )
 
-import CLI.Category
-import CLI.Transaction
-import CLI.MonthBudget
+import CLI.Category ( CategoryOptions, catOpts, handleCat )
+import CLI.Transaction ( TransactionOptions, tranOpts, handleTran )
+import CLI.MonthBudget ( MbOptions, mbOpts, handleMb )
 
 
 data CLI =
@@ -18,26 +26,26 @@ data CLI =
 
 catCmd :: ParserInfo CLI
 catCmd =
-    info (Category <$> categoryOptions) (fullDesc <> progDesc "Handle categories")
+    info (Category <$> catOpts) (fullDesc <> progDesc "Handle categories")
 
 transCmd :: ParserInfo CLI
 transCmd =
-    info (Transaction <$> transactionOptions) (fullDesc <> progDesc "Handle transactions")
+    info (Transaction <$> tranOpts) (fullDesc <> progDesc "Handle transactions")
 
 mbCmd :: ParserInfo CLI
 mbCmd = info (MonthBudget <$> mbOpts) (fullDesc <> progDesc "Handle month budgets")
 
 obolosOptions :: Parser CLI
 obolosOptions = hsubparser $
-       command "category" catCmd
-    <> command "transaction" transCmd
+       command "cat" catCmd
+    <> command "tran" transCmd
     <> command "mb" mbCmd
 
 cli :: ParserInfo CLI
 cli =
     info (obolosOptions <**> helper) (fullDesc <> progDesc "You better pay the ferryman")
 
-handleCli :: IConnection conn => conn -> CLI -> IO ()
-handleCli conn (Category args) = handleCategory conn args
-handleCli conn (Transaction args) = handleTransaction conn args
-handleCli conn (MonthBudget args) = handleMb conn args
+handleCli :: CLI -> IO ()
+handleCli (Category args) = handleCat args
+handleCli (Transaction args) = handleTran args
+handleCli (MonthBudget args) = handleMb args

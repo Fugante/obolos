@@ -1,37 +1,55 @@
 module CLI.MonthBudget
     ( MbOptions(..)
     , mbOpts
-    , handleMb
-    ) where
+    , handleMb )
+    where
 
-import Database.HDBC (IConnection)
+import Database.HDBC (toSql)
 import Options.Applicative
+    ( Alternative((<|>)),
+      optional,
+      argument,
+      auto,
+      command,
+      flag',
+      help,
+      info,
+      long,
+      metavar,
+      option,
+      progDesc,
+      short,
+      hsubparser,
+      Parser,
+      ParserInfo )
 
 import Relations.Entities
+    ( Entity(Mb), addEnt, getEnt, updEnt, delEnt, showEnt )
+import Relations.Views ( getAll )
 
 
 data AddOptions =
     AddOptions
-    { addOptYear :: Integer
-    , addOptMonth:: Integer
-    , addOptCat :: Integer
-    , addOptPlanned :: Integer
-    , addOptActual :: Integer
-    }
+    Integer
+    Integer
+    Integer
+    Integer
+    Integer
 
-data GetOptions = GetOptions { getOptId :: Integer }
+data GetOptions =
+      GetOne Integer
+    | GetAll
 
 data UpdateOptions =
     UpdateOptions
-    { upOptId :: Integer
-    , upOptYear :: Maybe Integer
-    , upOptMonth :: Maybe Integer
-    , upOptCat :: Maybe Integer
-    , upOptPlanned :: Maybe Integer
-    , upOptActual :: Maybe Integer
-    }
+    Integer
+    (Maybe Integer)
+    (Maybe Integer)
+    (Maybe Integer)
+    (Maybe Integer)
+    (Maybe Integer)
 
-data DeleteOptions = DeleteOptions { delOptId :: Integer}
+data DeleteOptions = DeleteOptions Integer
 
 data MbOptions =
       Add AddOptions
@@ -115,8 +133,14 @@ addOpts :: Parser AddOptions
 addOpts =
     AddOptions <$> yearArg <*> monthArg <*> catArg <*> planArg <*> actArg
 
+getOneOpt :: Parser GetOptions
+getOneOpt = GetOne <$> idArg
+
+getAllOpt :: Parser GetOptions
+getAllOpt = flag' GetAll (short 'a' <> long "all" <> help "Show all month budgets")
+
 getOpts :: Parser GetOptions
-getOpts = GetOptions <$> idArg
+getOpts = getOneOpt <|> getAllOpt
 
 updateOpts :: Parser UpdateOptions
 updateOpts =
@@ -128,21 +152,28 @@ delOpts = DeleteOptions <$> idArg
 
 -- Option handlers
 
-handleAdd :: IConnection conn => conn -> AddOptions -> IO ()
-handleAdd conn (AddOptions y m c p a) = addMb conn y m c p a
+handleAdd :: AddOptions -> IO ()
+handleAdd (AddOptions y m c p a) = addEnt Mb [toSql y, toSql m, toSql c, toSql p, toSql a]
 
-handleGet :: IConnection conn => conn -> GetOptions -> IO ()
-handleGet conn (GetOptions i) = do
-    mMb <- getMb conn i
-    case mMb of
-        Nothing -> putStrLn $ unwords ["Month budget with id", show i, "does not exist."]
-        Just mb -> putStrLn $ showMb mb
+handleGet :: GetOptions -> IO ()
+handleGet (GetOne i) = do
+    t <- getEnt Mb i
+    case t of
+        [i', y, m, c, p, a] -> do
+            putStrLn "id, year, month, category id, planned, actual"
+            putStrLn $ showEnt Mb [i', y, m, c, p, a]
+        _ -> putStrLn $ unwords ["Month budget with id", show i, "does not exist."]
+handleGet GetAll = do
+    ts <- getAll Mb
+    putStrLn "id, year, month, category id, planned, actual"
+    putStrLn . unlines . map (showEnt Mb) $ ts
 
-handleUpdate :: IConnection conn => conn -> UpdateOptions -> IO ()
-handleUpdate conn (UpdateOptions i y m c p a) = updateMb conn i y m c p a
+handleUpd :: UpdateOptions -> IO ()
+handleUpd (UpdateOptions i y m c p a) =
+    updEnt Mb i [toSql i, toSql y, toSql m, toSql c, toSql p, toSql a]
 
-handleDel :: IConnection conn => conn -> DeleteOptions -> IO ()
-handleDel conn (DeleteOptions i) = delMb conn i
+handleDel :: DeleteOptions -> IO ()
+handleDel (DeleteOptions i) = delEnt Mb i
 
 
 -- Command definitions
@@ -153,8 +184,8 @@ addCmd = info (Add <$> addOpts) (progDesc "Add a new month budget")
 getCmd :: ParserInfo MbOptions
 getCmd = info (Get <$> getOpts) (progDesc "Get the month budget with the given id")
 
-updateCmd :: ParserInfo MbOptions
-updateCmd =
+updCmd :: ParserInfo MbOptions
+updCmd =
     info (Update <$> updateOpts) (progDesc "Update the month budget with the given id")
 
 delCmd :: ParserInfo MbOptions
@@ -167,11 +198,11 @@ mbOpts :: Parser MbOptions
 mbOpts = hsubparser $
        command "add" addCmd
     <> command "get" getCmd
-    <> command "update" updateCmd
+    <> command "upd" updCmd
     <> command "del" delCmd
 
-handleMb :: IConnection conn => conn -> MbOptions -> IO ()
-handleMb conn (Add args) = handleAdd conn args
-handleMb conn (Get args) = handleGet conn args
-handleMb conn (Update args) = handleUpdate conn args
-handleMb conn (Delete args) = handleDel conn args
+handleMb :: MbOptions -> IO ()
+handleMb (Add args) = handleAdd args
+handleMb (Get args) = handleGet args
+handleMb (Update args) = handleUpd args
+handleMb (Delete args) = handleDel args

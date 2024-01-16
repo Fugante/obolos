@@ -1,36 +1,55 @@
 module CLI.Transaction
     ( TransactionOptions(..)
-    , transactionOptions
-    , handleTransaction
-    ) where
+    , tranOpts
+    , handleTran )
+    where
 
-import Data.Time
-import Database.HDBC (IConnection)
+import Data.Time ( LocalTime )
+import Database.HDBC ( toSql )
 import Options.Applicative
+    ( Alternative((<|>)),
+      optional,
+      argument,
+      auto,
+      command,
+      flag',
+      help,
+      info,
+      long,
+      metavar,
+      option,
+      progDesc,
+      short,
+      strOption,
+      hsubparser,
+      Parser,
+      ParserInfo )
 
 import Relations.Entities
+    ( Entity(Tran), addEnt, getEnt, updEnt, delEnt, showEnt )
+import Relations.Views ( getAll )
 
 
 data AddOptions =
     AddOptions
-    { addOptAmount :: Integer
-    , addOptCat :: Integer
-    , addOptDate :: LocalTime
-    , addOptNotes :: Maybe String
-    }
+    Integer
+    Integer
+    LocalTime
+    (Maybe String)
 
-data GetOptions = GetOptions { getOptId :: Integer }
+data GetOptions =
+      GetOne Integer
+    | GetAll
 
 data UpdateOptions =
     UpdateOptions
-    { upOptId :: Integer
-    , upOptAmount :: Maybe Integer
-    , upOptCat :: Maybe Integer
-    , upOptDate :: Maybe LocalTime
-    , upOptNotes :: Maybe String
-    }
+    Integer
+    (Maybe Integer)
+    (Maybe Integer)
+    (Maybe LocalTime)
+    (Maybe String)
 
-data DeleteOptions = DeleteOptions { delOptId :: Integer}
+data DeleteOptions = DeleteOptions Integer
 
 data TransactionOptions =
       Add AddOptions
@@ -44,11 +63,11 @@ data TransactionOptions =
 idArg :: Parser Integer
 idArg = argument auto (metavar "ID")
 
-amountArg :: Parser Integer
-amountArg = argument auto (metavar "AMOUNT" <> help "transaction amount (in cents)")
+amtArg :: Parser Integer
+amtArg = argument auto (metavar "AMOUNT" <> help "transaction amount (in cents)")
 
-categoryArg :: Parser Integer
-categoryArg =
+catArg :: Parser Integer
+catArg =
     argument auto (metavar "CATEGORY-ID" <> help "id of the transaction's category")
 
 dateArg :: Parser LocalTime
@@ -59,8 +78,8 @@ dateArg =
     <> help "date and time of the transaction. Format: yyyy-mm-dd HH:MM:SS[.ffffff]"
     )
 
-amountOpt :: Parser (Maybe Integer)
-amountOpt = optional $
+amtOpt :: Parser (Maybe Integer)
+amtOpt = optional $
     option
     auto
     (  short 'a'
@@ -69,8 +88,8 @@ amountOpt = optional $
     <> metavar "AMOUNT"
     )
 
-categoryOpt :: Parser (Maybe Integer)
-categoryOpt = optional $
+catOpt :: Parser (Maybe Integer)
+catOpt = optional $
     option
     auto
     (  short 'c'
@@ -98,67 +117,80 @@ notesOpt = optional $
     <> metavar "NOTES"
     )
 
-addOptions :: Parser AddOptions
-addOptions = AddOptions <$> amountArg <*> categoryArg <*> dateArg <*> notesOpt
+addOpts :: Parser AddOptions
+addOpts = AddOptions <$> amtArg <*> catArg <*> dateArg <*> notesOpt
 
-getOptions :: Parser GetOptions
-getOptions = GetOptions <$> idArg
+getOneOpt :: Parser GetOptions
+getOneOpt = GetOne <$> idArg
 
-updateOptions :: Parser UpdateOptions
-updateOptions =
-    UpdateOptions <$> idArg <*> amountOpt <*> categoryOpt <*> dateOpt <*> notesOpt
+getAllOpt :: Parser GetOptions
+getAllOpt = flag' GetAll (short 'a' <> long "all" <> help "Show all transactions")
 
-deleteOptions :: Parser DeleteOptions
-deleteOptions = DeleteOptions <$> idArg
+getOpts :: Parser GetOptions
+getOpts = getOneOpt <|> getAllOpt
+
+updOpts :: Parser UpdateOptions
+updOpts =
+    UpdateOptions <$> idArg <*> amtOpt <*> catOpt <*> dateOpt <*> notesOpt
+
+delOpts :: Parser DeleteOptions
+delOpts = DeleteOptions <$> idArg
 
 
 -- Option handlers
 
-handleAdd :: IConnection conn => conn -> AddOptions -> IO ()
-handleAdd conn (AddOptions a c d n) = addTrans conn a c d n
+handleAdd :: AddOptions -> IO ()
+handleAdd (AddOptions a c d n) = addEnt Tran [toSql a, toSql c, toSql d, toSql n]
 
-handleGet :: IConnection conn => conn -> GetOptions -> IO ()
-handleGet conn (GetOptions i) = do
-    mTrans <- getTrans conn i
-    case mTrans of
-        Nothing -> putStrLn $ unwords ["Transaction with id", show i, "does not exist."]
-        Just trans -> putStrLn $ showTrans trans
+handleGet :: GetOptions -> IO ()
+handleGet (GetOne i) = do
+    t <- getEnt Tran i
+    case t of
+        [i', a, c, d, n] -> do
+            putStrLn "id, amount, category id, date, notes"
+            putStrLn $ showEnt Tran [i', a, c, d, n]
+        _ -> putStrLn $ unwords ["Transaction with id", show i, "does not exist."]
+handleGet GetAll = do
+    ts <- getAll Tran
+    putStrLn "id, amount, category id, date, notes"
+    putStrLn . unlines . map (showEnt Tran) $ ts
 
-handleUpdate :: IConnection conn => conn -> UpdateOptions -> IO ()
-handleUpdate conn (UpdateOptions i a c d n) = updateTrans conn i a c d n
+handleUpd :: UpdateOptions -> IO ()
+handleUpd (UpdateOptions i a c d n) =
+    updEnt Tran i [toSql i, toSql a, toSql c, toSql d, toSql n]
 
-handleDelete :: IConnection conn => conn -> DeleteOptions -> IO ()
-handleDelete conn (DeleteOptions i) = delTrans conn i
+handleDel :: DeleteOptions -> IO ()
+handleDel (DeleteOptions i) = delEnt Tran i
 
 
 -- Command definitions
 
-addCommand :: ParserInfo TransactionOptions
-addCommand = info (Add <$> addOptions) (progDesc "Add a new transaction")
+addCmd :: ParserInfo TransactionOptions
+addCmd = info (Add <$> addOpts) (progDesc "Add a new transaction")
 
-getCommand :: ParserInfo TransactionOptions
-getCommand = info (Get <$> getOptions) (progDesc "Get the transaction with the given id")
+getCmd :: ParserInfo TransactionOptions
+getCmd = info (Get <$> getOpts) (progDesc "Get the transaction with the given id")
 
-updateCommand :: ParserInfo TransactionOptions
-updateCommand =
-    info (Update <$> updateOptions) (progDesc "Update the transaction with the given id")
+updCmd :: ParserInfo TransactionOptions
+updCmd =
+    info (Update <$> updOpts) (progDesc "Update the transaction with the given id")
 
-deleteCommand :: ParserInfo TransactionOptions
-deleteCommand =
-    info (Delete <$> deleteOptions) (progDesc "Delete the transaction with the given id")
+delCmd :: ParserInfo TransactionOptions
+delCmd =
+    info (Delete <$> delOpts) (progDesc "Delete the transaction with the given id")
 
 
 -- Transaction command
 
-transactionOptions :: Parser TransactionOptions
-transactionOptions = hsubparser $
-       command "add" addCommand
-    <> command "get" getCommand
-    <> command "update" updateCommand
-    <> command "delete" deleteCommand
+tranOpts :: Parser TransactionOptions
+tranOpts = hsubparser $
+       command "add" addCmd
+    <> command "get" getCmd
+    <> command "upd" updCmd
+    <> command "del" delCmd
 
-handleTransaction :: IConnection conn => conn -> TransactionOptions -> IO ()
-handleTransaction conn (Add args) = handleAdd conn args
-handleTransaction conn (Get args) = handleGet conn args
-handleTransaction conn (Update args) = handleUpdate conn args
-handleTransaction conn (Delete args) = handleDelete conn args
+handleTran :: TransactionOptions -> IO ()
+handleTran (Add args) = handleAdd args
+handleTran (Get args) = handleGet args
+handleTran (Update args) = handleUpd args
+handleTran (Delete args) = handleDel args

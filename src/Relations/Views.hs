@@ -2,20 +2,18 @@ module Relations.Views
     ( getAll
     ) where
 
+import Database.HDBC ( quickQuery' )
 
-import Relations.Entities
-import Database.HDBC
-import Data.Maybe (fromJust)
+import Relations.Entities ( Entity(..), Tuple, db )
 import qualified Relations.Queries as Q
 
 
-getAll :: IConnection conn => conn -> Relation -> IO [Relation]
-getAll conn (Cat _) = do
-    tuples <- quickQuery' conn (Q.selectAll ++ "Category;") []
-    return $ map (Cat . fromJust . tuple2Cat) tuples
-getAll conn (Trans _) = do
-    tuples <- quickQuery' conn (Q.selectAll ++ "Transaction;") []
-    return $ map (Trans . fromJust . tuple2Trans) tuples
-getAll conn (Mb _) = do
-    tuples <- quickQuery' conn (Q.selectAll ++ "Monthbudget;") []
-    return $ map (Mb . fromJust . tuple2Mb) tuples
+getAll :: Entity -> IO [Tuple]
+getAll e = do
+    conn <- db
+    q <-
+        case e of
+            Cat -> return $ Q.selectAll ++ "Category;"
+            Tran -> return $ Q.selectAll ++ "Transaction;"
+            Mb -> return $ Q.selectAll ++ "Monthbudget;"
+    quickQuery' conn q []

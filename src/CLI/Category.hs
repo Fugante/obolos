@@ -1,34 +1,51 @@
 module CLI.Category
     ( CategoryOptions(..)
-    , categoryOptions
-    , handleCategory
-    ) where
+    , catOpts
+    , handleCat )
+    where
 
-import Database.HDBC (IConnection)
+import Database.HDBC ( toSql )
 import Options.Applicative
+    ( Alternative((<|>)),
+      optional,
+      argument,
+      auto,
+      command,
+      flag',
+      help,
+      info,
+      long,
+      metavar,
+      option,
+      progDesc,
+      short,
+      strArgument,
+      strOption,
+      hsubparser,
+      Parser,
+      ParserInfo )
 
 import Relations.Entities
-import Relations.Views
+    ( Entity(Cat), addEnt, getEnt, updEnt, delEnt, showEnt )
+import Relations.Views ( getAll )
 
 
 data AddOptions =
     AddOptions
-    { addOptCat :: String
-    , addOptScat :: Integer
-    }
+    String
+    Integer
 
 data GetOptions =
-      GetOne { getOptId :: Integer }
+      GetOne Integer
     | GetAll
 
 data UpdateOptions =
     UpdateOptions
-    { upOptId :: Integer
-    , upOptCat :: Maybe String
-    , upOptScat :: Maybe Integer
-    }
+    Integer
+    (Maybe String)
+    (Maybe Integer)
 
-data DeleteOptions = DeleteOptions { delOptId :: Integer }
+data DeleteOptions = DeleteOptions Integer
 
 data CategoryOptions =
       Add AddOptions
@@ -36,17 +53,17 @@ data CategoryOptions =
     | Update UpdateOptions
     | Delete DeleteOptions
 
-categoryArgument :: Parser String
-categoryArgument = strArgument (metavar "CATEGORY")
+catArg :: Parser String
+catArg = strArgument (metavar "CATEGORY")
 
-supercategoryArgument :: Parser Integer
-supercategoryArgument = argument auto (metavar "SUPERCATECOGORY")
+sCatArg :: Parser Integer
+sCatArg = argument auto (metavar "SUPERCATECOGORY")
 
-idArgument :: Parser Integer
-idArgument = argument auto (metavar "ID")
+idArg :: Parser Integer
+idArg = argument auto (metavar "ID")
 
-categoryOption :: Parser (Maybe String)
-categoryOption = optional $
+catOpt :: Parser (Maybe String)
+catOpt = optional $
     strOption
     (  short 'c'
     <> long "category"
@@ -54,8 +71,8 @@ categoryOption = optional $
     <> metavar "CATEGORY"
     )
 
-supercategoryOption :: Parser (Maybe Integer)
-supercategoryOption = optional $
+sCatOpt :: Parser (Maybe Integer)
+sCatOpt = optional $
     option
     auto
     (  short 's'
@@ -64,66 +81,69 @@ supercategoryOption = optional $
     <> metavar "SUPERCATEGORY"
     )
 
-addOptions :: Parser AddOptions
-addOptions = AddOptions <$> categoryArgument <*> supercategoryArgument
-
-getAllOpt :: Parser GetOptions
-getAllOpt = flag' GetAll ( short 'a' <> long "all" <> help "Show all categories")
+addOpts :: Parser AddOptions
+addOpts = AddOptions <$> catArg <*> sCatArg
 
 getOneOpt :: Parser GetOptions
-getOneOpt = GetOne <$> idArgument
+getOneOpt = GetOne <$> idArg
+
+getAllOpt :: Parser GetOptions
+getAllOpt = flag' GetAll (short 'a' <> long "all" <> help "Show all categories")
 
 getOpts :: Parser GetOptions
 getOpts = getOneOpt <|> getAllOpt
 
-updateOptions :: Parser UpdateOptions
-updateOptions = UpdateOptions <$> idArgument <*> categoryOption <*> supercategoryOption
+updOpts :: Parser UpdateOptions
+updOpts = UpdateOptions <$> idArg <*> catOpt <*> sCatOpt
 
-deleteOptions :: Parser DeleteOptions
-deleteOptions = DeleteOptions <$> idArgument
+delOpts :: Parser DeleteOptions
+delOpts = DeleteOptions <$> idArg
 
-handleAdd :: IConnection conn => conn -> AddOptions -> IO ()
-handleAdd conn (AddOptions c sc) = addCat conn c sc
+handleAdd :: AddOptions -> IO ()
+handleAdd (AddOptions c sc) = addEnt Cat [toSql c, toSql sc]
 
-handleGet :: IConnection conn => conn -> GetOptions -> IO ()
-handleGet conn (GetOne cid) = do
-    mCat <- getCat conn cid
-    case mCat of
-        Nothing -> putStrLn $ unwords ["Category with id", show cid, "does not exist."]
-        Just cat -> putStrLn $ showCat cat
-handleGet conn GetAll = do
-    cats <- getAll conn (Cat (Category 0 "" 0))
-    putStrLn $ showCats (map getCategory cats)
+handleGet :: GetOptions -> IO ()
+handleGet (GetOne i) = do
+    t <- getEnt Cat i
+    case t of
+        [i', c, s] -> do
+            putStrLn "id, category, super category"
+            putStrLn $ showEnt Cat [i', c, s]
+        _ -> putStrLn $ "Category with id " ++ show i ++ " does not exist."
+handleGet GetAll = do
+    ts <- getAll Cat
+    putStrLn "id, category, super category"
+    putStrLn . unlines . map (showEnt Cat) $ ts
 
-handleUpdate :: IConnection conn => conn -> UpdateOptions -> IO ()
-handleUpdate conn (UpdateOptions cid c sc) = updateCat conn cid c sc
+handleUpd :: UpdateOptions -> IO ()
+handleUpd (UpdateOptions i c s) = updEnt Cat i [toSql i, toSql c, toSql s]
 
-handleDelete :: IConnection conn => conn -> DeleteOptions -> IO ()
-handleDelete conn (DeleteOptions cid) = deleteCat conn cid
+handleDel :: DeleteOptions -> IO ()
+handleDel (DeleteOptions i) = delEnt Cat i
 
-addCommand :: ParserInfo CategoryOptions
-addCommand = info (Add <$> addOptions) (progDesc "Add a new category")
+addCmd :: ParserInfo CategoryOptions
+addCmd = info (Add <$> addOpts) (progDesc "Add a new category")
 
-getCommand :: ParserInfo CategoryOptions
-getCommand = info (Get <$> getOpts) (progDesc "Get the category with given ID")
+getCmd :: ParserInfo CategoryOptions
+getCmd = info (Get <$> getOpts) (progDesc "Get the category with given ID")
 
-updateCommand :: ParserInfo CategoryOptions
-updateCommand = info
-    (Update <$> updateOptions) (progDesc "Update the category with the given ID")
+updCmd :: ParserInfo CategoryOptions
+updCmd = info
+    (Update <$> updOpts) (progDesc "Update the category with the given ID")
 
-deleteCommand :: ParserInfo CategoryOptions
-deleteCommand =
-    info (Delete <$> deleteOptions) (progDesc "Delete the category with the given ID")
+delCmd :: ParserInfo CategoryOptions
+delCmd =
+    info (Delete <$> delOpts) (progDesc "Delete the category with the given ID")
 
-categoryOptions :: Parser CategoryOptions
-categoryOptions = hsubparser $
-       command "add" addCommand
-    <> command "get" getCommand
-    <> command "update" updateCommand
-    <> command "delete" deleteCommand
+catOpts :: Parser CategoryOptions
+catOpts = hsubparser $
+       command "add" addCmd
+    <> command "get" getCmd
+    <> command "upd" updCmd
+    <> command "del" delCmd
 
-handleCategory :: IConnection conn => conn -> CategoryOptions -> IO ()
-handleCategory conn (Add args) = handleAdd conn args
-handleCategory conn (Get args) = handleGet conn args
-handleCategory conn (Update args) = handleUpdate conn args
-handleCategory conn (Delete args) = handleDelete conn args
+handleCat :: CategoryOptions -> IO ()
+handleCat (Add args) = handleAdd args
+handleCat (Get args) = handleGet args
+handleCat (Update args) = handleUpd args
+handleCat (Delete args) = handleDel args

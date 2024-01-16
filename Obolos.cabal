@@ -47,6 +47,7 @@ library
     , bytestring
     , optparse-applicative
     , time
+    , transformers
   default-language: Haskell2010
 
 executable obolos
@@ -67,6 +68,7 @@ executable obolos
     , bytestring
     , optparse-applicative
     , time
+    , transformers
   default-language: Haskell2010
 
 test-suite Obolos-test
@@ -88,4 +90,5 @@ test-suite Obolos-test
     , bytestring
     , optparse-applicative
     , time
+    , transformers
   default-language: Haskell2010
