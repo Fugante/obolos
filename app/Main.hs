@@ -1,6 +1,6 @@
 module Main (main) where
 
-import Database.HDBC ( IConnection (commit, disconnect) )
+import Database.HDBC ( IConnection (disconnect) )
 import Database.HDBC.PostgreSQL ( connectPostgreSQL )
 import Options.Applicative ( execParser )
 
@@ -17,5 +17,4 @@ main = do
             cmd <- execParser cli
             conn <- connectPostgreSQL . connString . db $ settings
             handleCli cmd
-            commit conn
             disconnect conn

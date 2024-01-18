@@ -2,23 +2,21 @@ module Relations.Entities
     ( db
     , Tuple
     , Entity(..)
-    , addEnt
+    , addEnts
     , getEnt
     , updEnt
-    , delEnt
-    , showEnt
-    ) where
+    , delEnts
+    , showEnt )
+    where
 
-import Control.Monad ( void )
 import Data.Bool ( bool )
 import Data.List ( intercalate )
-import Database.HDBC.PostgreSQL ( connectPostgreSQL, Connection )
+import Database.HDBC.PostgreSQL ( connectPostgreSQL, Connection)
 import Database.HDBC
     ( toSql
     , quickQuery'
     , SqlValue(SqlNull, SqlInteger, SqlByteString, SqlInt32, SqlLocalTime)
-    , IConnection(run)
-    )
+    , IConnection(run, prepare, commit), Statement (executeMany) )
 
 import qualified Relations.Queries as Q
 
@@ -41,15 +39,17 @@ setNewAttrs as bs = [ f b | (f, b) <- zip (selectRight <$> as) bs ]
 
 data Entity = Cat | Tran | Mb
 
-addEnt :: Entity -> Tuple -> IO ()
-addEnt e t = do
+
+addEnts :: Entity -> [Tuple] -> IO ()
+addEnts e ts = do
     conn <- db
-    q <-
-        case e of
-            Cat -> return Q.insertCategory
-            Tran -> return Q.insertTransaction
-            Mb -> return Q.insertMonthBudget
-    void $ run conn q t
+    let q = case e of
+            Cat -> Q.insertCategory
+            Tran -> Q.insertTransaction
+            Mb -> Q.insertMonthBudget
+    s <- prepare conn q
+    executeMany s ts
+    commit conn
 
 getEnt :: Entity -> Integer -> IO Tuple
 getEnt e i = do
@@ -77,19 +77,22 @@ updEnt e i t = do
             Mb -> return (Q.selectMonthBudget, Q.updateMonthBudget)
     ts <- quickQuery' conn q i'
     case ts of
-        [t'] -> void $ run conn q' (rotateL $ setNewAttrs t' t)
+        [t'] -> do
+            _ <- run conn q' (rotateL $ setNewAttrs t' t)
+            commit conn
         _ -> putStrLn $ unwords ["Category with id", show i, "does not exist."]
 
-delEnt :: Entity -> Integer -> IO ()
-delEnt e i = do
+delEnts :: Entity -> [Tuple] -> IO ()
+delEnts e ts = do
     conn <- db
     q <-
         case e of
             Cat -> return Q.deleteCategory
             Tran -> return Q.deleteTransaction
             Mb -> return Q.deleteMonthBudget
-    void $ run conn q [toSql i]
-
+    s <- prepare conn q
+    executeMany s ts
+    commit conn
 
 showEnt :: Entity -> Tuple -> String
 showEnt

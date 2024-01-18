@@ -4,7 +4,7 @@ module CLI.MonthBudget
     , handleMb )
     where
 
-import Database.HDBC (toSql)
+import Database.HDBC ( toSql )
 import Options.Applicative
     ( Alternative((<|>)),
       optional,
@@ -21,10 +21,11 @@ import Options.Applicative
       short,
       hsubparser,
       Parser,
-      ParserInfo )
+      ParserInfo
+      )
 
 import Relations.Entities
-    ( Entity(Mb), addEnt, getEnt, updEnt, delEnt, showEnt )
+    ( Entity(Mb), addEnts, getEnt, updEnt, delEnts, showEnt )
 import Relations.Views ( getAll )
 
 
@@ -153,7 +154,8 @@ delOpts = DeleteOptions <$> idArg
 -- Option handlers
 
 handleAdd :: AddOptions -> IO ()
-handleAdd (AddOptions y m c p a) = addEnt Mb [toSql y, toSql m, toSql c, toSql p, toSql a]
+handleAdd (AddOptions y m c p a) =
+    addEnts Mb [[toSql y, toSql m, toSql c, toSql p, toSql a]]
 
 handleGet :: GetOptions -> IO ()
 handleGet (GetOne i) = do
@@ -173,7 +175,7 @@ handleUpd (UpdateOptions i y m c p a) =
     updEnt Mb i [toSql i, toSql y, toSql m, toSql c, toSql p, toSql a]
 
 handleDel :: DeleteOptions -> IO ()
-handleDel (DeleteOptions i) = delEnt Mb i
+handleDel (DeleteOptions i) = delEnts Mb [[toSql i]]
 
 
 -- Command definitions

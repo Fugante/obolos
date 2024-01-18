@@ -1,39 +1,47 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module CLI.Category
     ( CategoryOptions(..)
     , catOpts
-    , handleCat )
+    , handleCat
+    )
     where
 
 import Database.HDBC ( toSql )
 import Options.Applicative
-    ( Alternative((<|>)),
-      optional,
-      argument,
-      auto,
-      command,
-      flag',
-      help,
-      info,
-      long,
-      metavar,
-      option,
-      progDesc,
-      short,
-      strArgument,
-      strOption,
-      hsubparser,
-      Parser,
-      ParserInfo )
+    ( Alternative((<|>))
+    , optional
+    , argument
+    , auto
+    , command
+    , flag'
+    , help
+    , info
+    , long
+    , metavar
+    , option
+    , progDesc
+    , short
+    , strArgument
+    , strOption
+    , hsubparser
+    , Parser
+    , ParserInfo
+    , some
+    )
 
 import Relations.Entities
-    ( Entity(Cat), addEnt, getEnt, updEnt, delEnt, showEnt )
+    ( Entity(Cat)
+    , addEnts
+    , getEnt
+    , updEnt
+    , delEnts
+    , showEnt
+    )
 import Relations.Views ( getAll )
 
 
-data AddOptions =
-    AddOptions
-    String
-    Integer
+data AddOptions = AddOptions String Integer
 
 data GetOptions =
       GetOne Integer
@@ -45,13 +53,14 @@ data UpdateOptions =
     (Maybe String)
     (Maybe Integer)
 
-data DeleteOptions = DeleteOptions Integer
+data DeleteOptions = DeleteOptions [Integer]
 
 data CategoryOptions =
       Add AddOptions
     | Get GetOptions
     | Update UpdateOptions
     | Delete DeleteOptions
+
 
 catArg :: Parser String
 catArg = strArgument (metavar "CATEGORY")
@@ -97,10 +106,11 @@ updOpts :: Parser UpdateOptions
 updOpts = UpdateOptions <$> idArg <*> catOpt <*> sCatOpt
 
 delOpts :: Parser DeleteOptions
-delOpts = DeleteOptions <$> idArg
+delOpts = DeleteOptions <$> some idArg
+
 
 handleAdd :: AddOptions -> IO ()
-handleAdd (AddOptions c sc) = addEnt Cat [toSql c, toSql sc]
+handleAdd (AddOptions c sc) = addEnts Cat [[toSql c, toSql sc]]
 
 handleGet :: GetOptions -> IO ()
 handleGet (GetOne i) = do
@@ -119,7 +129,8 @@ handleUpd :: UpdateOptions -> IO ()
 handleUpd (UpdateOptions i c s) = updEnt Cat i [toSql i, toSql c, toSql s]
 
 handleDel :: DeleteOptions -> IO ()
-handleDel (DeleteOptions i) = delEnt Cat i
+handleDel (DeleteOptions is) = delEnts Cat $ map ((:[]) . toSql) is
+
 
 addCmd :: ParserInfo CategoryOptions
 addCmd = info (Add <$> addOpts) (progDesc "Add a new category")

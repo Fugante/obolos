@@ -26,7 +26,7 @@ import Options.Applicative
       ParserInfo )
 
 import Relations.Entities
-    ( Entity(Tran), addEnt, getEnt, updEnt, delEnt, showEnt )
+    ( Entity(Tran), addEnts, getEnt, updEnt, delEnts, showEnt )
 import Relations.Views ( getAll )
 
 
@@ -140,7 +140,7 @@ delOpts = DeleteOptions <$> idArg
 -- Option handlers
 
 handleAdd :: AddOptions -> IO ()
-handleAdd (AddOptions a c d n) = addEnt Tran [toSql a, toSql c, toSql d, toSql n]
+handleAdd (AddOptions a c d n) = addEnts Tran [[toSql a, toSql c, toSql d, toSql n]]
 
 handleGet :: GetOptions -> IO ()
 handleGet (GetOne i) = do
@@ -160,7 +160,7 @@ handleUpd (UpdateOptions i a c d n) =
     updEnt Tran i [toSql i, toSql a, toSql c, toSql d, toSql n]
 
 handleDel :: DeleteOptions -> IO ()
-handleDel (DeleteOptions i) = delEnt Tran i
+handleDel (DeleteOptions i) = delEnts Tran [[toSql i]]
 
 
 -- Command definitions
