@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
-
 module CLI.Category
     ( CategoryOptions(..)
     , catOpts
@@ -30,7 +28,8 @@ import Options.Applicative
     , some
     )
 
-import Relations.Entities
+import qualified DB.Entities.Category as C
+import DB.Relations
     ( Entity(Cat)
     , addEnts
     , getEnt
@@ -38,10 +37,13 @@ import Relations.Entities
     , delEnts
     , showEnt
     )
-import Relations.Views ( getAll )
+import DB.Views ( getAll )
+import Data.Aeson ( decodeFileStrict )
 
 
-data AddOptions = AddOptions String Integer
+data AddOptions =
+      AddOne String Integer
+    | FromJson FilePath
 
 data GetOptions =
       GetOne Integer
@@ -61,6 +63,8 @@ data CategoryOptions =
     | Update UpdateOptions
     | Delete DeleteOptions
 
+
+-- Arguments and options
 
 catArg :: Parser String
 catArg = strArgument (metavar "CATEGORY")
@@ -90,8 +94,22 @@ sCatOpt = optional $
     <> metavar "SUPERCATEGORY"
     )
 
+fileOpt :: Parser FilePath
+fileOpt = strOption
+    (  short 'j'
+    <> long "from-json"
+    <> help "read from json file"
+    <> metavar "PATH"
+    )
+
+addOneOpt :: Parser AddOptions
+addOneOpt = AddOne <$> catArg <*> sCatArg
+
+fromJsonOpt :: Parser AddOptions
+fromJsonOpt = FromJson <$> fileOpt
+
 addOpts :: Parser AddOptions
-addOpts = AddOptions <$> catArg <*> sCatArg
+addOpts = addOneOpt <|> fromJsonOpt
 
 getOneOpt :: Parser GetOptions
 getOneOpt = GetOne <$> idArg
@@ -109,8 +127,15 @@ delOpts :: Parser DeleteOptions
 delOpts = DeleteOptions <$> some idArg
 
 
+-- Option handlers
+
 handleAdd :: AddOptions -> IO ()
-handleAdd (AddOptions c sc) = addEnts Cat [[toSql c, toSql sc]]
+handleAdd (AddOne c sc) = addEnts Cat [[toSql c, toSql sc]]
+handleAdd (FromJson path) = do
+    mCs <- decodeFileStrict path :: IO (Maybe [C.Category])
+    case mCs of
+        Nothing -> putStrLn "Could not parse JSON"
+        Just cs -> addEnts Cat . map (tail . C.catToTuple) $ cs
 
 handleGet :: GetOptions -> IO ()
 handleGet (GetOne i) = do
@@ -132,6 +157,8 @@ handleDel :: DeleteOptions -> IO ()
 handleDel (DeleteOptions is) = delEnts Cat $ map ((:[]) . toSql) is
 
 
+-- Command definitions
+
 addCmd :: ParserInfo CategoryOptions
 addCmd = info (Add <$> addOpts) (progDesc "Add a new category")
 
@@ -145,6 +172,9 @@ updCmd = info
 delCmd :: ParserInfo CategoryOptions
 delCmd =
     info (Delete <$> delOpts) (progDesc "Delete the category with the given ID")
+
+
+-- Category command
 
 catOpts :: Parser CategoryOptions
 catOpts = hsubparser $

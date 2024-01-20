@@ -1,4 +1,4 @@
-module Relations.Entities
+module DB.Relations
     ( db
     , Tuple
     , Entity(..)
@@ -6,19 +6,16 @@ module Relations.Entities
     , getEnt
     , updEnt
     , delEnts
-    , showEnt )
+    , showEnt
+    )
     where
 
 import Data.Bool ( bool )
 import Data.List ( intercalate )
-import Database.HDBC.PostgreSQL ( connectPostgreSQL, Connection)
+import Database.HDBC.PostgreSQL ( connectPostgreSQL, Connection )
 import Database.HDBC
-    ( toSql
-    , quickQuery'
-    , SqlValue(SqlNull, SqlInteger, SqlByteString, SqlInt32, SqlLocalTime)
-    , IConnection(run, prepare, commit), Statement (executeMany) )
 
-import qualified Relations.Queries as Q
+import qualified DB.Queries as Q
 
 
 db :: IO Connection
@@ -39,7 +36,6 @@ setNewAttrs as bs = [ f b | (f, b) <- zip (selectRight <$> as) bs ]
 
 data Entity = Cat | Tran | Mb
 
-
 addEnts :: Entity -> [Tuple] -> IO ()
 addEnts e ts = do
     conn <- db
@@ -48,7 +44,7 @@ addEnts e ts = do
             Tran -> Q.insertTransaction
             Mb -> Q.insertMonthBudget
     s <- prepare conn q
-    executeMany s ts
+    catchSql (executeMany s ts) $ \(SqlError _ _ m) -> print m
     commit conn
 
 getEnt :: Entity -> Integer -> IO Tuple

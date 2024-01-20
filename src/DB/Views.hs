@@ -1,11 +1,11 @@
-module Relations.Views
+module DB.Views
     ( getAll
     ) where
 
 import Database.HDBC ( quickQuery' )
 
-import Relations.Entities ( Entity(..), Tuple, db )
-import qualified Relations.Queries as Q
+import DB.Relations ( Entity(..), Tuple, db )
+import qualified DB.Queries as Q
 
 
 getAll :: Entity -> IO [Tuple]

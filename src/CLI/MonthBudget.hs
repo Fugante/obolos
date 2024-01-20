@@ -24,9 +24,9 @@ import Options.Applicative
       ParserInfo
       )
 
-import Relations.Entities
+import DB.Relations
     ( Entity(Mb), addEnts, getEnt, updEnt, delEnts, showEnt )
-import Relations.Views ( getAll )
+import DB.Views ( getAll )
 
 
 data AddOptions =

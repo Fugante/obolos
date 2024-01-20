@@ -1,4 +1,4 @@
-module Relations.Queries
+module DB.Queries
     ( insertCategory
     , selectCategory
     , selectCategory'
@@ -19,7 +19,8 @@ module Relations.Queries
 -- Category CRUD queries
 
 insertCategory :: String
-insertCategory = "INSERT INTO Category (category, supercategory) VALUES (?, ?);"
+insertCategory =
+    "INSERT INTO Category (category, supercategory) VALUES (?, ?) ON CONFLICT DO NOTHING;"
 
 selectCategory :: String
 selectCategory = "SELECT * FROM Category WHERE id = ?;"
