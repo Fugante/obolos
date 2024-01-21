@@ -5,55 +5,28 @@ module CLI.Category
     )
     where
 
+-- External dependencies
+import Data.Aeson ( decodeFileStrict )
 import Database.HDBC ( toSql )
 import Options.Applicative
-    ( Alternative((<|>))
-    , optional
-    , argument
-    , auto
-    , command
-    , flag'
-    , help
-    , info
-    , long
-    , metavar
-    , option
-    , progDesc
-    , short
-    , strArgument
-    , strOption
-    , hsubparser
-    , Parser
-    , ParserInfo
-    , some
-    )
 
+-- Local modules
 import qualified DB.Entities.Category as C
 import DB.Relations
-    ( Entity(Cat)
-    , addEnts
-    , getEnt
-    , updEnt
-    , delEnts
-    , showEnt
-    )
 import DB.Views ( getAll )
-import Data.Aeson ( decodeFileStrict )
 
 
 data AddOptions =
       AddOne String Integer
-    | FromJson FilePath
+    | AddFromJSON FilePath
 
 data GetOptions =
       GetOne Integer
     | GetAll
 
 data UpdateOptions =
-    UpdateOptions
-    Integer
-    (Maybe String)
-    (Maybe Integer)
+      UpdOne Integer (Maybe String) (Maybe Integer)
+    | UpdFromJSON FilePath
 
 data DeleteOptions = DeleteOptions [Integer]
 
@@ -105,11 +78,11 @@ fileOpt = strOption
 addOneOpt :: Parser AddOptions
 addOneOpt = AddOne <$> catArg <*> sCatArg
 
-fromJsonOpt :: Parser AddOptions
-fromJsonOpt = FromJson <$> fileOpt
+addFromJsonOpt :: Parser AddOptions
+addFromJsonOpt = AddFromJSON <$> fileOpt
 
 addOpts :: Parser AddOptions
-addOpts = addOneOpt <|> fromJsonOpt
+addOpts = addOneOpt <|> addFromJsonOpt
 
 getOneOpt :: Parser GetOptions
 getOneOpt = GetOne <$> idArg
@@ -120,8 +93,14 @@ getAllOpt = flag' GetAll (short 'a' <> long "all" <> help "Show all categories")
 getOpts :: Parser GetOptions
 getOpts = getOneOpt <|> getAllOpt
 
+updOneOpt :: Parser UpdateOptions
+updOneOpt = UpdOne <$> idArg <*> catOpt <*> sCatOpt
+
+updFromJsonOpt :: Parser UpdateOptions
+updFromJsonOpt = UpdFromJSON <$> fileOpt
+
 updOpts :: Parser UpdateOptions
-updOpts = UpdateOptions <$> idArg <*> catOpt <*> sCatOpt
+updOpts = updOneOpt <|> updFromJsonOpt
 
 delOpts :: Parser DeleteOptions
 delOpts = DeleteOptions <$> some idArg
@@ -131,7 +110,7 @@ delOpts = DeleteOptions <$> some idArg
 
 handleAdd :: AddOptions -> IO ()
 handleAdd (AddOne c sc) = addEnts Cat [[toSql c, toSql sc]]
-handleAdd (FromJson path) = do
+handleAdd (AddFromJSON path) = do
     mCs <- decodeFileStrict path :: IO (Maybe [C.Category])
     case mCs of
         Nothing -> putStrLn "Could not parse JSON"
@@ -151,7 +130,12 @@ handleGet GetAll = do
     putStrLn . unlines . map (showEnt Cat) $ ts
 
 handleUpd :: UpdateOptions -> IO ()
-handleUpd (UpdateOptions i c s) = updEnt Cat i [toSql i, toSql c, toSql s]
+handleUpd (UpdOne i c s) = updEnts Cat [[toSql i, toSql c, toSql s]]
+handleUpd (UpdFromJSON path) = do
+    mCs <- decodeFileStrict path :: IO (Maybe [C.Category])
+    case mCs of
+        Nothing -> putStrLn "Could not parse JSON"
+        Just cs -> updEnts Cat $ map C.catToTuple cs
 
 handleDel :: DeleteOptions -> IO ()
 handleDel (DeleteOptions is) = delEnts Cat $ map ((:[]) . toSql) is
@@ -160,18 +144,18 @@ handleDel (DeleteOptions is) = delEnts Cat $ map ((:[]) . toSql) is
 -- Command definitions
 
 addCmd :: ParserInfo CategoryOptions
-addCmd = info (Add <$> addOpts) (progDesc "Add a new category")
+addCmd = info (Add <$> addOpts) (progDesc "Add new categories")
 
 getCmd :: ParserInfo CategoryOptions
-getCmd = info (Get <$> getOpts) (progDesc "Get the category with given ID")
+getCmd = info (Get <$> getOpts) (progDesc "Get categories")
 
 updCmd :: ParserInfo CategoryOptions
 updCmd = info
-    (Update <$> updOpts) (progDesc "Update the category with the given ID")
+    (Update <$> updOpts) (progDesc "Update cateogories")
 
 delCmd :: ParserInfo CategoryOptions
 delCmd =
-    info (Delete <$> delOpts) (progDesc "Delete the category with the given ID")
+    info (Delete <$> delOpts) (progDesc "Delete categories")
 
 
 -- Category command

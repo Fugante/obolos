@@ -1,7 +1,6 @@
 module DB.Queries
     ( insertCategory
     , selectCategory
-    , selectCategory'
     , updateCategory
     , deleteCategory
     , insertTransaction
@@ -24,9 +23,6 @@ insertCategory =
 
 selectCategory :: String
 selectCategory = "SELECT * FROM Category WHERE id = ?;"
-
-selectCategory' :: String
-selectCategory' = "SELECT * FROM Category WHERE category = ? AND supercategory = ?;"
 
 updateCategory :: String
 updateCategory = "UPDATE Category SET category = ?, supercategory = ? WHERE id = ?;"

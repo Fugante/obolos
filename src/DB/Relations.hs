@@ -5,11 +5,13 @@ module DB.Relations
     , addEnts
     , getEnt
     , updEnt
+    , updEnts
     , delEnts
     , showEnt
     )
     where
 
+import Control.Monad ( void )
 import Data.Bool ( bool )
 import Data.List ( intercalate )
 import Database.HDBC.PostgreSQL ( connectPostgreSQL, Connection )
@@ -39,13 +41,19 @@ data Entity = Cat | Tran | Mb
 addEnts :: Entity -> [Tuple] -> IO ()
 addEnts e ts = do
     conn <- db
-    let q = case e of
+    s <- prepare conn q
+    handle conn s ts
+    where
+        q = case e of
             Cat -> Q.insertCategory
             Tran -> Q.insertTransaction
             Mb -> Q.insertMonthBudget
-    s <- prepare conn q
-    catchSql (executeMany s ts) $ \(SqlError _ _ m) -> print m
-    commit conn
+
+        handle :: IConnection conn => conn -> Statement -> [Tuple] -> IO ()
+        handle conn s ts' =
+            catchSql
+            (executeMany s ts' >> commit conn)
+            $ \(SqlError _ _ m) -> print m >> rollback conn
 
 getEnt :: Entity -> Integer -> IO Tuple
 getEnt e i = do
@@ -61,6 +69,29 @@ getEnt e i = do
         [t] -> return t
         [] -> return []
         _ -> fail $ "Crital Error: more than one category with id " ++ show i
+
+updEnts :: Entity -> [Tuple] -> IO ()
+updEnts e ts = do
+    conn <- db
+    mapM_ (handle conn) ts
+    where
+        (sq, uq) = case e of
+            Cat -> (Q.selectCategory, Q.updateCategory)
+            Tran -> (Q.selectTransaction, Q.updateTransaction)
+            Mb -> (Q.selectMonthBudget, Q.updateMonthBudget)
+
+        upd :: IConnection conn => conn -> Tuple -> IO ()
+        upd conn t = do
+            ts' <- quickQuery' conn sq [head t]
+            case ts' of
+                [t'] -> void $ run conn uq (rotateL $ setNewAttrs t' t)
+                _ -> return ()
+
+        handle :: IConnection conn => conn -> Tuple -> IO ()
+        handle conn t =
+            catchSql
+            (upd conn t >> commit conn)
+            $ \(SqlError _ _ m) -> print m >> rollback conn
 
 updEnt :: Entity -> Integer -> Tuple -> IO ()
 updEnt e i t = do
