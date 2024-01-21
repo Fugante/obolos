@@ -6,23 +6,30 @@ module CLI.Category
     where
 
 -- External dependencies
-import Data.Aeson ( decodeFileStrict )
-import Database.HDBC ( toSql )
+import Data.Aeson (decodeFileStrict, encode)
+import qualified Data.ByteString.Lazy as B
+import Database.HDBC (toSql)
 import Options.Applicative
 
 -- Local modules
 import qualified DB.Entities.Category as C
 import DB.Relations
-import DB.Views ( getAll )
+import DB.Views (getAll)
 
+
+data Cardinality =
+      One Integer
+    | All
+
+data Format =
+      CSV
+    | JSON
 
 data AddOptions =
       AddOne String Integer
     | AddFromJSON FilePath
 
-data GetOptions =
-      GetOne Integer
-    | GetAll
+data GetOptions = GetOptions Cardinality Format
 
 data UpdateOptions =
       UpdOne Integer (Maybe String) (Maybe Integer)
@@ -75,6 +82,36 @@ fileOpt = strOption
     <> metavar "PATH"
     )
 
+oneOpt :: Parser Cardinality
+oneOpt = One <$> idArg
+
+allOpt :: Parser Cardinality
+allOpt = flag' All
+    (  short 'a'
+    <> long "all"
+    <> help "show all categories"
+    )
+
+carOpt :: Parser Cardinality
+carOpt = oneOpt <|> allOpt
+
+csvOpt :: Parser Format
+csvOpt = flag CSV CSV
+    (  short 'c'
+    <> long "csv"
+    <> help "show output in csv format"
+    )
+
+jsonOpt :: Parser Format
+jsonOpt = flag' JSON
+    (  short 'j'
+    <> long "json"
+    <> help "show output in json format"
+    )
+
+formatOpt :: Parser Format
+formatOpt = csvOpt <|> jsonOpt
+
 addOneOpt :: Parser AddOptions
 addOneOpt = AddOne <$> catArg <*> sCatArg
 
@@ -84,14 +121,8 @@ addFromJsonOpt = AddFromJSON <$> fileOpt
 addOpts :: Parser AddOptions
 addOpts = addOneOpt <|> addFromJsonOpt
 
-getOneOpt :: Parser GetOptions
-getOneOpt = GetOne <$> idArg
-
-getAllOpt :: Parser GetOptions
-getAllOpt = flag' GetAll (short 'a' <> long "all" <> help "Show all categories")
-
 getOpts :: Parser GetOptions
-getOpts = getOneOpt <|> getAllOpt
+getOpts = GetOptions <$> carOpt <*> formatOpt
 
 updOneOpt :: Parser UpdateOptions
 updOneOpt = UpdOne <$> idArg <*> catOpt <*> sCatOpt
@@ -117,17 +148,16 @@ handleAdd (AddFromJSON path) = do
         Just cs -> addEnts Cat . map (tail . C.catToTuple) $ cs
 
 handleGet :: GetOptions -> IO ()
-handleGet (GetOne i) = do
-    t <- getEnt Cat i
-    case t of
-        [i', c, s] -> do
-            putStrLn "id, category, super category"
-            putStrLn $ showEnt Cat [i', c, s]
-        _ -> putStrLn $ "Category with id " ++ show i ++ " does not exist."
-handleGet GetAll = do
-    ts <- getAll Cat
-    putStrLn "id, category, super category"
-    putStrLn . unlines . map (showEnt Cat) $ ts
+handleGet (GetOptions card form) = do
+    ts <- case card of
+        One i -> (:[]) <$> getEnt Cat i
+        All -> getAll Cat
+    case form of
+        CSV -> putStrLn $
+            "id,category,supercategory\n" ++ unlines (map (showEnt Cat) ts)
+        JSON -> do
+            B.putStr $ encode (map C.tupleToCat ts)
+            putStrLn ""
 
 handleUpd :: UpdateOptions -> IO ()
 handleUpd (UpdOne i c s) = updEnts Cat [[toSql i, toSql c, toSql s]]
