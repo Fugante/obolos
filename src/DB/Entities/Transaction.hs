@@ -3,6 +3,7 @@
 module DB.Entities.Transaction
     ( Transaction(..)
     , tranToTuple
+    , tupleToTran
     )
     where
 
@@ -20,7 +21,8 @@ import Data.Aeson
 
 -- Local modules
 import DB.Relations (Tuple)
-import Database.HDBC (toSql, SqlValue (SqlString))
+import Database.HDBC
+import Data.ByteString.Char8 (unpack)
 
 
 data Transaction =
@@ -42,3 +44,9 @@ tranToTuple :: Transaction -> Tuple
 tranToTuple (Transaction i a c d n) = [toSql i, toSql a, toSql c, toSql d, n']
     where
         n' = case n of {Nothing -> SqlString ""; Just n'' -> toSql n''}
+
+tupleToTran :: Tuple -> Transaction
+tupleToTran [SqlInteger i, SqlInteger a, SqlInteger c, SqlLocalTime d, SqlByteString n] =
+    Transaction (Just i) (Just a) (Just c) (Just d) (Just $ unpack n)
+tupleToTran _ =
+    Transaction Nothing Nothing Nothing Nothing Nothing

@@ -111,7 +111,7 @@ showEnt
     , SqlByteString c
     , SqlInteger s
     ] =
-        intercalate ", " [show i, show c, show s]
+        intercalate "," [show i, show c, show s]
 showEnt
     Tran
     [ SqlInteger i
@@ -120,7 +120,7 @@ showEnt
     , SqlLocalTime d
     , SqlByteString n
     ] =
-        intercalate ", " [show i, show a, show c, show d, show n]
+        intercalate "," [show i, show a, show c, show d, show n]
 showEnt
     Mb
     [ SqlInteger i
@@ -130,5 +130,5 @@ showEnt
     , SqlInteger p
     , SqlInteger a
     ] =
-        intercalate ", " [show i, show y, show m, show c, show p, show a]
+        intercalate "," [show i, show y, show m, show c, show p, show a]
 showEnt _ _ = ""

@@ -9,7 +9,7 @@ module CLI.Transaction
 import Data.Time (LocalTime)
 
 -- External dependencies
-import Data.Aeson (decodeFileStrict)
+import Data.Aeson (decodeFileStrict, encode)
 import Database.HDBC (toSql)
 import Options.Applicative
 
@@ -17,15 +17,22 @@ import Options.Applicative
 import qualified DB.Entities.Transaction as T
 import DB.Relations
 import DB.Views (getAll)
+import qualified Data.ByteString.Lazy as B
 
+
+data Cardinality =
+      One Integer
+    | All
+
+data Format =
+      CSV
+    | JSON
 
 data AddOptions =
       AddOne Integer Integer LocalTime (Maybe String)
     | AddFromJSON FilePath
 
-data GetOptions =
-      GetOne Integer
-    | GetAll
+data GetOptions = GetOptions Cardinality Format
 
 data UpdateOptions =
       UpdOne Integer (Maybe Integer) (Maybe Integer) (Maybe LocalTime) (Maybe String)
@@ -107,6 +114,36 @@ fileOpt = strOption
     <> metavar "PATH"
     )
 
+oneOpt :: Parser Cardinality
+oneOpt = One <$> idArg
+
+allOpt :: Parser Cardinality
+allOpt = flag' All
+    (  short 'a'
+    <> long "all"
+    <> help "show all categories"
+    )
+
+carOpt :: Parser Cardinality
+carOpt = oneOpt <|> allOpt
+
+csvOpt :: Parser Format
+csvOpt = flag CSV CSV
+    (  short 'c'
+    <> long "csv"
+    <> help "show output in csv format"
+    )
+
+jsonOpt :: Parser Format
+jsonOpt = flag' JSON
+    (  short 'j'
+    <> long "json"
+    <> help "show output in json format"
+    )
+
+formatOpt :: Parser Format
+formatOpt = csvOpt <|> jsonOpt
+
 addOneOpt :: Parser AddOptions
 addOneOpt = AddOne <$> amtArg <*> catArg <*> dateArg <*> notesOpt
 
@@ -116,14 +153,8 @@ addFromJsonOpt = AddFromJSON <$> fileOpt
 addOpts :: Parser AddOptions
 addOpts = addOneOpt <|> addFromJsonOpt
 
-getOneOpt :: Parser GetOptions
-getOneOpt = GetOne <$> idArg
-
-getAllOpt :: Parser GetOptions
-getAllOpt = flag' GetAll (short 'a' <> long "all" <> help "Show all transactions")
-
 getOpts :: Parser GetOptions
-getOpts = getOneOpt <|> getAllOpt
+getOpts = GetOptions <$> carOpt <*> formatOpt
 
 updOneOpt :: Parser UpdateOptions
 updOneOpt = UpdOne <$> idArg <*> amtOpt <*> catOpt <*> dateOpt <*> notesOpt
@@ -149,17 +180,16 @@ handleAdd (AddFromJSON path) = do
         Just ts -> addEnts Tran . map (tail . T.tranToTuple) $ ts
 
 handleGet :: GetOptions -> IO ()
-handleGet (GetOne i) = do
-    t <- getEnt Tran i
-    case t of
-        [i', a, c, d, n] -> do
-            putStrLn "id, amount, category id, date, notes"
-            putStrLn $ showEnt Tran [i', a, c, d, n]
-        _ -> putStrLn $ unwords ["Transaction with id", show i, "does not exist."]
-handleGet GetAll = do
-    ts <- getAll Tran
-    putStrLn "id, amount, category id, date, notes"
-    putStrLn . unlines . map (showEnt Tran) $ ts
+handleGet (GetOptions card form) = do
+    ts <- case card of
+        One i -> (:[]) <$> getEnt Tran i
+        All -> getAll Tran
+    case form of
+        CSV -> putStrLn $
+            "id,amount,categoryId,date,notes\n" ++ unlines (map (showEnt Tran) ts)
+        JSON -> do
+            B.putStr $ encode (map T.tupleToTran ts)
+            putStrLn ""
 
 handleUpd :: UpdateOptions -> IO ()
 handleUpd (UpdOne i a c d n) =

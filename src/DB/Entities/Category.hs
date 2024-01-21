@@ -3,6 +3,7 @@
 module DB.Entities.Category
     ( Category(..)
     , catToTuple
+    , tupleToCat
     )
     where
 
@@ -15,7 +16,8 @@ import Data.Aeson
     )
 
 import DB.Relations (Tuple)
-import Database.HDBC (toSql)
+import Database.HDBC (toSql, SqlValue (SqlInteger, SqlByteString))
+import Data.ByteString.Char8 (unpack)
 
 
 data Category =
@@ -33,3 +35,9 @@ instance ToJSON Category where
 
 catToTuple :: Category -> Tuple
 catToTuple (Category i c s) = [toSql i, toSql c, toSql s]
+
+tupleToCat :: Tuple -> Category
+tupleToCat [SqlInteger i, SqlByteString c, SqlInteger s] =
+    Category (Just i) (Just $ unpack c) (Just s)
+tupleToCat _ =
+    Category Nothing Nothing Nothing

@@ -3,6 +3,7 @@
 module DB.Entities.MonthBudget
     ( MonthBudget(..)
     , mbToTuple
+    , tupleToMb
     )
     where
 
@@ -19,7 +20,7 @@ import Data.Aeson
 
 -- Local modules
 import DB.Relations (Tuple)
-import Database.HDBC (toSql)
+import Database.HDBC
 
 
 data MonthBudget =
@@ -41,3 +42,10 @@ instance ToJSON MonthBudget where
 mbToTuple :: MonthBudget -> Tuple
 mbToTuple (MonthBudget i y m c p a) =
     [toSql i, toSql y, toSql m, toSql c, toSql p, toSql a]
+
+tupleToMb :: Tuple -> MonthBudget
+tupleToMb
+    [SqlInteger i, SqlInteger y, SqlInt32 m, SqlInteger c, SqlInteger p, SqlInteger a] =
+        MonthBudget (Just i) (Just y) (Just $ toInteger m) (Just c) (Just p) (Just a)
+tupleToMb _ =
+    MonthBudget Nothing Nothing Nothing Nothing Nothing Nothing

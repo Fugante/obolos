@@ -6,23 +6,31 @@ module CLI.MonthBudget
     where
 
 -- External dependencies
-import Data.Aeson (decodeFileStrict)
+import Data.Aeson (decodeFileStrict, encode)
 import Database.HDBC (toSql)
 import Options.Applicative
 
 -- Local modules
 import qualified DB.Entities.MonthBudget as Mb
 import DB.Relations
+    ( Entity(Mb), addEnts, getEnt, updEnts, delEnts, showEnt )
 import DB.Views (getAll)
+import qualified Data.ByteString.Lazy as B
 
+
+data Cardinality =
+      One Integer
+    | All
+
+data Format =
+      CSV
+    | JSON
 
 data AddOptions =
       AddOne Integer Integer Integer Integer Integer
     | AddFromJSON FilePath
 
-data GetOptions =
-      GetOne Integer
-    | GetAll
+data GetOptions = GetOptions Cardinality Format
 
 data UpdateOptions =
       UpdOne
@@ -122,6 +130,36 @@ fileOpt = strOption
     <> metavar "PATH"
     )
 
+oneOpt :: Parser Cardinality
+oneOpt = One <$> idArg
+
+allOpt :: Parser Cardinality
+allOpt = flag' All
+    (  short 'a'
+    <> long "all"
+    <> help "show all categories"
+    )
+
+carOpt :: Parser Cardinality
+carOpt = oneOpt <|> allOpt
+
+csvOpt :: Parser Format
+csvOpt = flag CSV CSV
+    (  short 'c'
+    <> long "csv"
+    <> help "show output in csv format"
+    )
+
+jsonOpt :: Parser Format
+jsonOpt = flag' JSON
+    (  short 'j'
+    <> long "json"
+    <> help "show output in json format"
+    )
+
+formatOpt :: Parser Format
+formatOpt = csvOpt <|> jsonOpt
+
 addOneOpt :: Parser AddOptions
 addOneOpt = AddOne <$> yearArg <*> monthArg <*> catArg <*> planArg <*> actArg
 
@@ -131,14 +169,8 @@ addFromJsonOpt = AddFromJSON <$> fileOpt
 addOpts :: Parser AddOptions
 addOpts = addOneOpt <|> addFromJsonOpt
 
-getOneOpt :: Parser GetOptions
-getOneOpt = GetOne <$> idArg
-
-getAllOpt :: Parser GetOptions
-getAllOpt = flag' GetAll (short 'a' <> long "all" <> help "Show all month budgets")
-
 getOpts :: Parser GetOptions
-getOpts = getOneOpt <|> getAllOpt
+getOpts = GetOptions <$> carOpt <*> formatOpt
 
 updOneOpt :: Parser UpdateOptions
 updOneOpt = UpdOne <$> idArg <*> yearOpt <*> monthOpt <*> catOpt <*> planOpt <*> actOpt
@@ -164,17 +196,16 @@ handleAdd (AddFromJSON path) = do
         Just mbs -> addEnts Mb . map (tail . Mb.mbToTuple) $ mbs
 
 handleGet :: GetOptions -> IO ()
-handleGet (GetOne i) = do
-    t <- getEnt Mb i
-    case t of
-        [i', y, m, c, p, a] -> do
-            putStrLn "id, year, month, category id, planned, actual"
-            putStrLn $ showEnt Mb [i', y, m, c, p, a]
-        _ -> putStrLn $ unwords ["Month budget with id", show i, "does not exist."]
-handleGet GetAll = do
-    ts <- getAll Mb
-    putStrLn "id, year, month, category id, planned, actual"
-    putStrLn . unlines . map (showEnt Mb) $ ts
+handleGet (GetOptions card form) = do
+    mbs <- case card of
+        One i -> (:[]) <$> getEnt Mb i
+        All -> getAll Mb
+    case form of
+        CSV -> putStrLn $
+            "id,year,month,categoryId,planned,actual\n" ++ unlines (map (showEnt Mb) mbs)
+        JSON -> do
+            B.putStr $ encode (map Mb.tupleToMb mbs)
+            putStrLn ""
 
 handleUpd :: UpdateOptions -> IO ()
 handleUpd (UpdOne i y m c p a) =
