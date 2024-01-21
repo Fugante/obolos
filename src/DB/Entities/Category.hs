@@ -32,4 +32,4 @@ instance ToJSON Category where
 
 
 catToTuple :: Category -> Tuple
-catToTuple (Category i c sc) = [toSql i, toSql c, toSql sc]
+catToTuple (Category i c s) = [toSql i, toSql c, toSql s]

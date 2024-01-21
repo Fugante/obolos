@@ -4,17 +4,16 @@ module DB.Relations
     , Entity(..)
     , addEnts
     , getEnt
-    , updEnt
     , updEnts
     , delEnts
     , showEnt
     )
     where
 
-import Control.Monad ( void )
-import Data.Bool ( bool )
-import Data.List ( intercalate )
-import Database.HDBC.PostgreSQL ( connectPostgreSQL, Connection )
+import Control.Monad (void)
+import Data.Bool (bool)
+import Data.List (intercalate)
+import Database.HDBC.PostgreSQL (connectPostgreSQL, Connection)
 import Database.HDBC
 
 import qualified DB.Queries as Q
@@ -92,22 +91,6 @@ updEnts e ts = do
             catchSql
             (upd conn t >> commit conn)
             $ \(SqlError _ _ m) -> print m >> rollback conn
-
-updEnt :: Entity -> Integer -> Tuple -> IO ()
-updEnt e i t = do
-    let i' = [toSql i]
-    conn <- db
-    (q, q') <-
-        case e of
-            Cat -> return (Q.selectCategory, Q.updateCategory)
-            Tran -> return (Q.selectTransaction, Q.updateTransaction)
-            Mb -> return (Q.selectMonthBudget, Q.updateMonthBudget)
-    ts <- quickQuery' conn q i'
-    case ts of
-        [t'] -> do
-            _ <- run conn q' (rotateL $ setNewAttrs t' t)
-            commit conn
-        _ -> putStrLn $ unwords ["Category with id", show i, "does not exist."]
 
 delEnts :: Entity -> [Tuple] -> IO ()
 delEnts e ts = do

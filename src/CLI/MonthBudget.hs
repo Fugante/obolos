@@ -1,54 +1,38 @@
 module CLI.MonthBudget
     ( MbOptions(..)
     , mbOpts
-    , handleMb )
+    , handleMb
+    )
     where
 
-import Database.HDBC ( toSql )
+-- External dependencies
+import Data.Aeson (decodeFileStrict)
+import Database.HDBC (toSql)
 import Options.Applicative
-    ( Alternative((<|>)),
-      optional,
-      argument,
-      auto,
-      command,
-      flag',
-      help,
-      info,
-      long,
-      metavar,
-      option,
-      progDesc,
-      short,
-      hsubparser,
-      Parser,
-      ParserInfo
-      )
 
+-- Local modules
+import qualified DB.Entities.MonthBudget as Mb
 import DB.Relations
-    ( Entity(Mb), addEnts, getEnt, updEnt, delEnts, showEnt )
-import DB.Views ( getAll )
+import DB.Views (getAll)
 
 
 data AddOptions =
-    AddOptions
-    Integer
-    Integer
-    Integer
-    Integer
-    Integer
+      AddOne Integer Integer Integer Integer Integer
+    | AddFromJSON FilePath
 
 data GetOptions =
       GetOne Integer
     | GetAll
 
 data UpdateOptions =
-    UpdateOptions
-    Integer
-    (Maybe Integer)
-    (Maybe Integer)
-    (Maybe Integer)
-    (Maybe Integer)
-    (Maybe Integer)
+      UpdOne
+        Integer
+        (Maybe Integer)
+        (Maybe Integer)
+        (Maybe Integer)
+        (Maybe Integer)
+        (Maybe Integer)
+    | UpdFromJSON FilePath
 
 data DeleteOptions = DeleteOptions Integer
 
@@ -130,9 +114,22 @@ actOpt = optional $
     <> help "Actual amoung spent/gained in the month"
     )
 
+fileOpt :: Parser FilePath
+fileOpt = strOption
+    (  short 'j'
+    <> long "from-json"
+    <> help "read from json file"
+    <> metavar "PATH"
+    )
+
+addOneOpt :: Parser AddOptions
+addOneOpt = AddOne <$> yearArg <*> monthArg <*> catArg <*> planArg <*> actArg
+
+addFromJsonOpt :: Parser AddOptions
+addFromJsonOpt = AddFromJSON <$> fileOpt
+
 addOpts :: Parser AddOptions
-addOpts =
-    AddOptions <$> yearArg <*> monthArg <*> catArg <*> planArg <*> actArg
+addOpts = addOneOpt <|> addFromJsonOpt
 
 getOneOpt :: Parser GetOptions
 getOneOpt = GetOne <$> idArg
@@ -143,9 +140,14 @@ getAllOpt = flag' GetAll (short 'a' <> long "all" <> help "Show all month budget
 getOpts :: Parser GetOptions
 getOpts = getOneOpt <|> getAllOpt
 
+updOneOpt :: Parser UpdateOptions
+updOneOpt = UpdOne <$> idArg <*> yearOpt <*> monthOpt <*> catOpt <*> planOpt <*> actOpt
+
+updFromJsonOpt :: Parser UpdateOptions
+updFromJsonOpt = UpdFromJSON <$> fileOpt
+
 updateOpts :: Parser UpdateOptions
-updateOpts =
-    UpdateOptions <$> idArg <*> yearOpt <*> monthOpt <*> catOpt <*> planOpt <*> actOpt
+updateOpts = updOneOpt <|> updFromJsonOpt
 
 delOpts :: Parser DeleteOptions
 delOpts = DeleteOptions <$> idArg
@@ -154,8 +156,12 @@ delOpts = DeleteOptions <$> idArg
 -- Option handlers
 
 handleAdd :: AddOptions -> IO ()
-handleAdd (AddOptions y m c p a) =
-    addEnts Mb [[toSql y, toSql m, toSql c, toSql p, toSql a]]
+handleAdd (AddOne y m c p a) = addEnts Mb [[toSql y, toSql m, toSql c, toSql p, toSql a]]
+handleAdd (AddFromJSON path) = do
+    mMbs <- decodeFileStrict path :: IO (Maybe [Mb.MonthBudget])
+    case mMbs of
+        Nothing -> putStrLn "Could not parse JSON"
+        Just mbs -> addEnts Mb . map (tail . Mb.mbToTuple) $ mbs
 
 handleGet :: GetOptions -> IO ()
 handleGet (GetOne i) = do
@@ -171,8 +177,13 @@ handleGet GetAll = do
     putStrLn . unlines . map (showEnt Mb) $ ts
 
 handleUpd :: UpdateOptions -> IO ()
-handleUpd (UpdateOptions i y m c p a) =
-    updEnt Mb i [toSql i, toSql y, toSql m, toSql c, toSql p, toSql a]
+handleUpd (UpdOne i y m c p a) =
+    updEnts Mb [[toSql i, toSql y, toSql m, toSql c, toSql p, toSql a]]
+handleUpd (UpdFromJSON path) = do
+    mMbs <- decodeFileStrict path :: IO (Maybe [Mb.MonthBudget])
+    case mMbs of
+        Nothing -> putStrLn "Could not parse JSON"
+        Just mbs -> updEnts Mb $ map Mb.mbToTuple mbs
 
 handleDel :: DeleteOptions -> IO ()
 handleDel (DeleteOptions i) = delEnts Mb [[toSql i]]

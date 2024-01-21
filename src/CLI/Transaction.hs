@@ -1,53 +1,35 @@
 module CLI.Transaction
     ( TransactionOptions(..)
     , tranOpts
-    , handleTran )
+    , handleTran
+    )
     where
 
-import Data.Time ( LocalTime )
-import Database.HDBC ( toSql )
-import Options.Applicative
-    ( Alternative((<|>)),
-      optional,
-      argument,
-      auto,
-      command,
-      flag',
-      help,
-      info,
-      long,
-      metavar,
-      option,
-      progDesc,
-      short,
-      strOption,
-      hsubparser,
-      Parser,
-      ParserInfo )
+-- Dependencies
+import Data.Time (LocalTime)
 
+-- External dependencies
+import Data.Aeson (decodeFileStrict)
+import Database.HDBC (toSql)
+import Options.Applicative
+
+-- Local modules
+import qualified DB.Entities.Transaction as T
 import DB.Relations
-    ( Entity(Tran), addEnts, getEnt, updEnt, delEnts, showEnt )
-import DB.Views ( getAll )
+import DB.Views (getAll)
 
 
 data AddOptions =
-    AddOptions
-    Integer
-    Integer
-    LocalTime
-    (Maybe String)
+      AddOne Integer Integer LocalTime (Maybe String)
+    | AddFromJSON FilePath
 
 data GetOptions =
       GetOne Integer
     | GetAll
 
 data UpdateOptions =
-    UpdateOptions
-    Integer
-    (Maybe Integer)
-    (Maybe Integer)
-    (Maybe LocalTime)
-    (Maybe String)
+      UpdOne Integer (Maybe Integer) (Maybe Integer) (Maybe LocalTime) (Maybe String)
+    | UpdFromJSON FilePath
 
 data DeleteOptions = DeleteOptions Integer
 
@@ -117,8 +99,22 @@ notesOpt = optional $
     <> metavar "NOTES"
     )
 
+fileOpt :: Parser FilePath
+fileOpt = strOption
+    (  short 'j'
+    <> long "from-json"
+    <> help "read from json file"
+    <> metavar "PATH"
+    )
+
+addOneOpt :: Parser AddOptions
+addOneOpt = AddOne <$> amtArg <*> catArg <*> dateArg <*> notesOpt
+
+addFromJsonOpt :: Parser AddOptions
+addFromJsonOpt = AddFromJSON <$> fileOpt
+
 addOpts :: Parser AddOptions
-addOpts = AddOptions <$> amtArg <*> catArg <*> dateArg <*> notesOpt
+addOpts = addOneOpt <|> addFromJsonOpt
 
 getOneOpt :: Parser GetOptions
 getOneOpt = GetOne <$> idArg
@@ -129,9 +125,14 @@ getAllOpt = flag' GetAll (short 'a' <> long "all" <> help "Show all transactions
 getOpts :: Parser GetOptions
 getOpts = getOneOpt <|> getAllOpt
 
+updOneOpt :: Parser UpdateOptions
+updOneOpt = UpdOne <$> idArg <*> amtOpt <*> catOpt <*> dateOpt <*> notesOpt
+
+updFromJsonOpt :: Parser UpdateOptions
+updFromJsonOpt = UpdFromJSON <$> fileOpt
+
 updOpts :: Parser UpdateOptions
-updOpts =
-    UpdateOptions <$> idArg <*> amtOpt <*> catOpt <*> dateOpt <*> notesOpt
+updOpts = updOneOpt <|> updFromJsonOpt
 
 delOpts :: Parser DeleteOptions
 delOpts = DeleteOptions <$> idArg
@@ -140,7 +141,12 @@ delOpts = DeleteOptions <$> idArg
 -- Option handlers
 
 handleAdd :: AddOptions -> IO ()
-handleAdd (AddOptions a c d n) = addEnts Tran [[toSql a, toSql c, toSql d, toSql n]]
+handleAdd (AddOne a c d n) = addEnts Tran [[toSql a, toSql c, toSql d, toSql n]]
+handleAdd (AddFromJSON path) = do
+    mTs <- decodeFileStrict path :: IO (Maybe [T.Transaction])
+    case mTs of
+        Nothing -> putStrLn "Could not parse JSON"
+        Just ts -> addEnts Tran . map (tail . T.tranToTuple) $ ts
 
 handleGet :: GetOptions -> IO ()
 handleGet (GetOne i) = do
@@ -156,8 +162,13 @@ handleGet GetAll = do
     putStrLn . unlines . map (showEnt Tran) $ ts
 
 handleUpd :: UpdateOptions -> IO ()
-handleUpd (UpdateOptions i a c d n) =
-    updEnt Tran i [toSql i, toSql a, toSql c, toSql d, toSql n]
+handleUpd (UpdOne i a c d n) =
+    updEnts Tran [[toSql i, toSql a, toSql c, toSql d, toSql n]]
+handleUpd (UpdFromJSON path) = do
+    mTs <- decodeFileStrict path :: IO (Maybe [T.Transaction])
+    case mTs of
+        Nothing -> putStrLn "Could not parse JSON"
+        Just ts -> updEnts Tran $ map T.tranToTuple ts
 
 handleDel :: DeleteOptions -> IO ()
 handleDel (DeleteOptions i) = delEnts Tran [[toSql i]]

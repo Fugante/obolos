@@ -29,6 +29,8 @@ library
       CLI.MonthBudget
       CLI.Transaction
       DB.Entities.Category
+      DB.Entities.MonthBudget
+      DB.Entities.Transaction
       DB.Queries
       DB.Relations
       DB.Views
