@@ -12,6 +12,7 @@ module DB.Queries
     , updateMonthBudget
     , deleteMonthBudget
     , selectAll
+    , monthTotals
     ) where
 
 
@@ -76,3 +77,12 @@ deleteMonthBudget = "DELETE FROM Monthbudget WHERE id = ?;"
 
 selectAll :: String
 selectAll = "SELECT * FROM "
+
+
+
+monthTotals :: String
+monthTotals =
+       "SELECT c.category, m.planned, m.actual, m.planned - m.actual AS total "
+    ++ "FROM monthbudget AS m "
+    ++ "JOIN category AS c ON m.category_id = c.id "
+    ++ "WHERE m.year = ? AND m.month = ?;"

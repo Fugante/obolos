@@ -24,15 +24,15 @@ source-repository head
 
 library
   exposed-modules:
-      CLI.Category
       CLI.Commands
-      CLI.MonthBudget
-      CLI.Transaction
+      CLI.CRUD
+      CLI.Info
       DB.Entities.Category
+      DB.Entities.Entity
       DB.Entities.MonthBudget
       DB.Entities.Transaction
       DB.Queries
-      DB.Relations
+      DB.Relations.MonthTotal
       DB.Views
       Settings
   other-modules:
