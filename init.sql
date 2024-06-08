@@ -1,108 +1,211 @@
 -- DEFINE RELATIONS
 
-CREATE TABLE IF NOT EXISTS Category (
-    id SERIAL PRIMARY KEY
-  , category VARCHAR(255) NOT NULL
-  , supercategory INTEGER NOT NULL DEFAULT 1
-                  REFERENCES Category (id) ON DELETE RESTRICT ON UPDATE CASCADE
-  , UNIQUE (category, supercategory)
+CREATE TABLE IF NOT EXISTS "Categories" (
+      "category" VARCHAR(50) PRIMARY KEY
+    , "supercategory" VARCHAR NOT NULL DEFAULT 'root'
+                      REFERENCES "Categories" ("category")
+                      ON DELETE RESTRICT
+                      ON UPDATE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS Transaction (
-    id SERIAL PRIMARY KEY
-  , amount INTEGER NOT NULL
-  , category_id INTEGER NOT NULL
-                REFERENCES Category (id) ON DELETE RESTRICT ON UPDATE CASCADE
-  , date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-  , notes VARCHAR(255) NOT NULL DEFAULT ''
+CREATE TABLE IF NOT EXISTS "Transactions" (
+      "id" SERIAL PRIMARY KEY
+    , "amount" INTEGER NOT NULL
+    , "category" VARCHAR(50) NOT NULL
+                 REFERENCES "Categories" ("category")
+                 ON DELETE RESTRICT
+                 ON UPDATE CASCADE
+    , "date" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    , "notes" VARCHAR(255) NOT NULL DEFAULT ''
 );
 
-CREATE TABLE IF NOT EXISTS MonthBudget (
-    id SERIAL PRIMARY KEY
-  , year INTEGER NOT NULL
-  , month SMALLINT NOT NULL
-            CONSTRAINT valid_month
-            CHECK (month > 0 AND month < 13)
-  , category_id INTEGER NOT NULL
-                REFERENCES Category (id) ON DELETE RESTRICT ON UPDATE CASCADE
-  , planned INTEGER NOT NULL
-  , actual INTEGER NOT NULL
-  , UNIQUE (year, month, category_id)
+CREATE TABLE IF NOT EXISTS "Months" (
+      "id" SMALLSERIAL PRIMARY KEY
+    , "year" SMALLINT NOT NULL
+             DEFAULT EXTRACT(YEAR FROM CURRENT_TIMESTAMP)
+    , "month" SMALLINT NOT NULL
+              DEFAULT EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
+              CONSTRAINT "valid_month" CHECK ("month" > 0 AND "month" < 13)
+    , "income" INTEGER NOT NULL DEFAULT 0
+    , "expenses" INTEGER NOT NULL DEFAULT 0
+    , "balance" INTEGER NOT NULL DEFAULT 0
+    , UNIQUE ("year", "month")
+);
+
+CREATE TABLE IF NOT EXISTS "Balances" (
+      "month_id" SMALLINT REFERENCES "Months" ("id")
+                 ON DELETE RESTRICT
+                 ON UPDATE CASCADE
+    , "category" VARCHAR(50) NOT NULL
+                    REFERENCES "Categories" ("category")
+                    ON DELETE RESTRICT
+                    ON UPDATE CASCADE
+    , "planned" INTEGER NOT NULL DEFAULT 0
+    , "actual" INTEGER NOT NULL DEFAULT 0
+    , PRIMARY KEY ("month_id", "category")
 );
 
 
--- CREATE TRIGGERS
+-- CREATE FUNCTIONS AND TRIGGERS
 
-CREATE OR REPLACE FUNCTION fn_update_real()
-RETURNS TRIGGER AS $update_real$
+CREATE OR REPLACE FUNCTION get_supercategories(cat text)
+  RETURNS TABLE (category text)
+AS $$
+  WITH RECURSIVE root(category) AS (
+    SELECT CAST ("category" AS TEXT) FROM "Categories" WHERE "category" = cat
+    UNION ALL
+      SELECT "Categories"."supercategory" FROM root, "Categories"
+        WHERE root."category" = "Categories"."category"
+        AND "Categories"."category" NOT IN ('root', 'income', 'expense')
+  )
+  SELECT * FROM root;
+$$ LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION is_income(cat text)
+  RETURNS BOOLEAN
+AS $$
+  SELECT (
+    SELECT "category" FROM get_supercategories(cat) ORDER BY "category" ASC LIMIT 1
+  ) = 'income';
+$$ LANGUAGE SQL;
+
+CREATE OR REPLACE FUNCTION is_expense(cat text)
+  RETURNS BOOLEAN
+AS $$
+  SELECT (
+    SELECT "category" FROM get_supercategories(cat) ORDER BY "category" ASC LIMIT 1
+  ) = 'expense';
+$$ LANGUAGE SQL;
+
+CREATE OR REPLACE PROCEDURE update_months(transaction "Transactions")
+AS $$
+    from datetime import datetime
+
+    date = datetime.strptime(transaction["date"], "%Y-%m-%d %H:%M:%S.%f")
+    t_year = date.year
+    t_month = date.month
+    income = 0
+    expenses = 0
+    query = plpy.prepare("SELECT * FROM is_income($1)", ["text"])
+    if plpy.execute(query, [transaction["category"]])[0]["is_income"]:
+      income = transaction["amount"]
+    else:
+      expenses = transaction["amount"]
+    balance = income - expenses
+
+    month_query = plpy.prepare(
+      'SELECT * FROM "Months" WHERE "year" = $1 AND "month" = $2',
+      ["smallint", "smallint"]
+    )
+    months = plpy.execute(month_query, [t_year, t_month])
+    if not months:
+        query = plpy.prepare(
+          'INSERT INTO "Months" ("year", "month", "income", "expenses", "balance") '
+          'VALUES ($1, $2, $3, $4, $5)',
+          ["smallint", "smallint", "integer", "integer", "integer"]
+        )
+        plpy.execute(query, [t_year, t_month, income, expenses, balance])
+        month = plpy.execute(month_query, [t_year, t_month])[0]
+    else:
+        month = months[0]
+        query = plpy.prepare(
+          'UPDATE "Months" SET "income" = "income" + $1, "expenses" = "expenses" + $2, '
+          '"balance" = "balance" + $3 WHERE "id" = $4',
+          ["integer", "integer", "integer", "integer"]
+        )
+        plpy.execute(query, [income, expenses, balance, month["id"]])
+$$ LANGUAGE plpython3u;
+
+CREATE OR REPLACE PROCEDURE update_balances(transaction "Transactions")
+AS $$
+    from datetime import datetime
+
+    date = datetime.strptime(transaction["date"], "%Y-%m-%d %H:%M:%S.%f")
+    t_month = date.month
+    t_year = date.year
+    query = plpy.prepare(
+      'SELECT * FROM "Months" WHERE "year" = $1 AND "month" = $2',
+      ["smallint", "smallint"]
+    )
+    month = plpy.execute(query, [t_year, t_month])[0]
+    query = plpy.prepare('SELECT * FROM get_supercategories($1)', ["text"])
+    supercategories = plpy.execute(query, [transaction["category"]])
+    for category in supercategories:
+        query = plpy.prepare(
+          'SELECT * FROM "Balances" WHERE "month_id" = $1 AND "category" = $2',
+          ["integer", "text"]
+        )
+        balances = plpy.execute(query, [month["id"], category["category"]])
+        if not balances:
+            query = plpy.prepare(
+              'INSERT INTO "Balances" ("month_id", "category", "actual") '
+              'VALUES ($1, $2, $3)',
+              ["integer", "text", "integer"]
+            )
+            plpy.execute(
+              query, [month["id"], category["category"], transaction["amount"]]
+            )
+        else:
+            query = plpy.prepare(
+              'UPDATE "Balances" SET "actual" = "actual" + $1 '
+              'WHERE "month_id" = $2 AND "category" = $3',
+              ["integer", "integer", "text"]
+            )
+            plpy.execute(
+              query, [transaction["amount"], month["id"], category["category"]]
+            )
+$$ LANGUAGE plpython3u;
+
+CREATE OR REPLACE FUNCTION update_totals()
+  RETURNS TRIGGER
+AS $$
 BEGIN
-  UPDATE MonthBudget SET actual = actual + NEW.amount
-                   WHERE NEW.category_id = category_id
-                     AND EXTRACT(YEAR FROM NEW.date) = MonthBudget.year
-                     AND EXTRACT(MONTH FROM NEW.date) = MonthBudget.month;
+  CALL update_months(NEW);
+  CALL update_balances(NEW);
   RETURN NEW;
 END;
-$update_real$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION fn_update_real2()
-RETURNS TRIGGER AS $update_real2$
-BEGIN
-  IF NEW.amount != OLD.amount THEN
-    UPDATE MonthBudget SET actual = actual + NEW.amount - OLD.amount
-                     WHERE NEW.category_id = category_id
-                       AND EXTRACT(YEAR FROM NEW.date) = MonthBudget.year
-                       AND EXTRACT(MONTH FROM NEW.date) = MonthBudget.month;
-  END IF;
-  RETURN NEW;
-END;
-$update_real2$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE TRIGGER update_real
-AFTER INSERT ON Transaction
+CREATE OR REPLACE TRIGGER update_totals
+AFTER INSERT ON "Transactions"
 FOR EACH ROW
-EXECUTE PROCEDURE fn_update_real();
-
-CREATE OR REPLACE TRIGGER update_real2
-AFTER UPDATE OF amount ON Transaction
-FOR EACH ROW
-EXECUTE PROCEDURE fn_update_real2();
-
+EXECUTE PROCEDURE update_totals();
 
 -- POPULATE DATABASE
 
 BEGIN;
 ALTER TABLE Category DISABLE TRIGGER ALL;
-INSERT INTO Category (category, supercategory) VALUES ('root', 1);
+INSERT INTO Category (category, supercategory) VALUES ('root', 'root');
 ALTER TABLE Category ENABLE TRIGGER ALL;
 COMMIT;
 
 INSERT INTO Category (category, supercategory) VALUES
-      ('egresos', 1)        -- 2
-    , ('ingresos', 1)       -- 3
-    , ('impuestos', 2)      -- 4
-    , ('seguros', 2)        -- 5
-    , ('vivienda', 2)       -- 6
-    , ('suministros', 2)    -- 7
-    , ('alimentos', 2)      -- 8
-    , ('personal', 2)       -- 9
-    , ('credito', 2)
-    , ('inversiones', 3)
-    , ('sueldo', 3)
-    , ('bonos', 3)
-    , ('intereses', 3)
-    , ('prestamos', 3)
-    , ('deudores', 3)
-    , ('iva', 4)
-    , ('isr', 4)
-    , ('seguro_medico', 5)
-    , ('seguro_desempleo', 5)
-    , ('pension', 5)
-    , ('renta', 6)
-    , ('luz', 7)
-    , ('gas', 7)
-    , ('internet', 7)
-    , ('telefonia', 7)
-    , ('transporte', 9)
-    , ('entretenimiento', 9)
-    , ('classes', 9)
-    , ('otros', 9);
+      ('expense', 'root')
+    , ('income', 'root')
+    , ('impuestos', 'expense')
+    , ('seguros', 'expense')
+    , ('vivienda', 'expense')
+    , ('suministros', 'expense')
+    , ('alimentos', 'expense')
+    , ('personal', 'expense')
+    , ('credito', 'expense')
+    , ('inversiones', 'income')
+    , ('sueldo', 'income')
+    , ('bonos', 'income')
+    , ('intereses', 'income')
+    , ('prestamos', 'income')
+    , ('deudores', 'income')
+    , ('iva', 'impuestos')
+    , ('isr', 'impuestos')
+    , ('seguro_medico', 'seguros')
+    , ('seguro_desempleo', 'seguros')
+    , ('pension', 'seguros')
+    , ('renta', 'vivienda')
+    , ('luz', 'suministros')
+    , ('gas', 'suministros')
+    , ('internet', 'suministros')
+    , ('telefonia', 'suministros')
+    , ('transporte', 'suministros')
+    , ('entretenimiento', 'suministros')
+    , ('classes', 'suministros')
+    , ('otros', 'suministros');
